@@ -1,10 +1,13 @@
 # Workforce OS — mobile app (Android + iPhone)
 
 One Expo / React Native codebase for both phones. Same features as the web app:
-type **or speak** instructions (12 languages incl. Hindi, Marathi, Tamil, Telugu,
-Bengali), watch tasks run, open results and share files, see what's waiting for your
-approval, manage the workforce and memory, and use the emergency stop. Plus **push
-notifications** when a task is done, needs your answer or needs approval.
+**chat with your own assistant** by typing, dictating or in a hands-free **voice
+conversation** where it talks back (12 languages incl. Hindi, Marathi, Tamil, Telugu,
+Bengali; the voice uses the phone's built-in text-to-speech). It remembers you and hands
+real work to the workforce; task progress appears in the chat. Also: watch tasks run,
+open and share files, approve what's waiting, connect services, manage the workforce
+and memory, and use the emergency stop. Plus **push notifications** when a task is done,
+needs your answer or needs approval.
 
 ## Run it on your phone (development build)
 

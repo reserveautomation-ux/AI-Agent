@@ -287,3 +287,89 @@ export interface Connector {
   fields: ConnectorField[];
   accounts: ConnectedAccount[];
 }
+
+// --- Chat ----------------------------------------------------------------------
+
+export interface Conversation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatTaskRef {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  waiting_for_connection?: string[];
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  via: 'text' | 'voice';
+  meta: {
+    kind?: 'reply' | 'task_update';
+    task_id?: string;
+    status?: TaskStatus;
+    waiting_for_connection?: string[];
+    tasks?: ChatTaskRef[];
+    memories?: string[];
+    interrupted?: boolean;
+  };
+  created_at: string;
+}
+
+export interface ConversationDetail extends Conversation {
+  messages: ChatMessage[];
+  tasks: Record<string, ChatTaskRef>;
+}
+
+export type ChatEvent =
+  | { type: 'conversation'; id: string; title: string }
+  | { type: 'text'; text: string }
+  | { type: 'task'; task: ChatTaskRef }
+  | { type: 'memory'; content: string }
+  | { type: 'done'; message_id: string; text: string }
+  | { type: 'error'; message: string };
+
+/** Send a message and receive the reply as it is written (Server-Sent Events over expo/fetch). */
+export async function streamChat(
+  body: { content: string; conversation_id?: string | null; via: 'text' | 'voice' },
+  onEvent: (e: ChatEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await expoFetch(`${API_URL}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const b = await res.json();
+      detail = typeof b.detail === 'string' ? b.detail : JSON.stringify(b.detail);
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, detail);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let cut;
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const chunk = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      for (const line of chunk.split('\n')) {
+        if (line.startsWith('data: ')) onEvent(JSON.parse(line.slice(6)) as ChatEvent);
+      }
+    }
+  }
+}

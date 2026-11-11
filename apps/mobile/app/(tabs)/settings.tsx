@@ -119,6 +119,13 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
+      <H>Your assistant</H>
+      <Card>
+        <T>What your assistant remembers about you: preferences, contacts and standing instructions.</T>
+        <View style={{ height: 10 }} />
+        <Button title="Open Memory" variant="ghost" onPress={() => router.push('/memory')} />
+      </Card>
+
       <H>Connections</H>
       <Card>
         <T>Gmail, Calendar, WhatsApp, Telegram, Slack, GitHub, Vercel and more. Connect only what you need.</T>

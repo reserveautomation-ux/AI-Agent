@@ -28,7 +28,12 @@ function usePendingApprovals(): number {
 }
 
 const TABS: { name: string; title: string; icon: IconName }[] = [
-  { name: 'index', title: 'Command', icon: { ios: 'bolt.fill', android: 'bolt', web: 'bolt' } },
+  {
+    name: 'index',
+    title: 'Chat',
+    icon: { ios: 'bubble.left.and.bubble.right.fill', android: 'chat', web: 'chat' },
+  },
+  { name: 'tasks', title: 'Tasks', icon: { ios: 'bolt.fill', android: 'bolt', web: 'bolt' } },
   {
     name: 'approvals',
     title: 'Approvals',
@@ -38,11 +43,6 @@ const TABS: { name: string; title: string; icon: IconName }[] = [
     name: 'workforce',
     title: 'Workforce',
     icon: { ios: 'person.3.fill', android: 'groups', web: 'groups' },
-  },
-  {
-    name: 'memory',
-    title: 'Memory',
-    icon: { ios: 'brain.head.profile', android: 'psychology', web: 'psychology' },
   },
   {
     name: 'settings',
@@ -71,6 +71,7 @@ export default function TabLayout() {
             title: t.title,
             tabBarIcon: ({ color }) => <Icon name={t.icon} color={String(color)} size={24} />,
             tabBarBadge: t.name === 'approvals' && pending > 0 ? pending : undefined,
+            headerShown: t.name !== 'index', // the chat draws its own header
           }}
         />
       ))}

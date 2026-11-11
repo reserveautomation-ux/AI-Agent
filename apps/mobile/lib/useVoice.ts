@@ -27,7 +27,14 @@ const ERRORS: Record<string, string> = {
 };
 
 /** Native speech-to-text (Android SpeechRecognizer / iOS Speech) in the chosen language. */
-export function useVoice(opts: { lang: string; onText: (text: string) => void; onDone?: (text: string) => void }) {
+export function useVoice(opts: {
+  lang: string;
+  onText: (text: string) => void;
+  /** Called when listening ends with something heard. */
+  onDone?: (text: string) => void;
+  /** Called whenever listening ends, even if nothing was heard (voice conversation). */
+  onEnd?: (text: string) => void;
+}) {
   const [listening, setListening] = useState(false);
   const [available, setAvailable] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +62,7 @@ export function useVoice(opts: { lang: string; onText: (text: string) => void; o
     // "end" is always the last event, including after errors.
     setListening(false);
     if (text.current) cb.current.onDone?.(text.current);
+    cb.current.onEnd?.(text.current);
   });
 
   const start = useCallback(async () => {
