@@ -11,14 +11,16 @@ from typing import Any
 
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
+from workforce_core.approvals import ApprovalError, binding_from_row, check_approval
 from workforce_core.db import record_audit, set_actor
 from workforce_core.memory import format_for_prompt, recall, remember
 from workforce_core.policy import Policy
 
 from .agent_loop import AgentError, run_agent
 from .artifacts import csv_stats
-from .browser import BrowserService
+from .browser import BlockedURL, BrowserError, BrowserService
 from .evaluations import refresh_evaluations
+from .executor import ACTION_LABELS, NotConnected, execute_action
 from .gateway import AgentInfo, StepContext, ToolGateway
 from .llm import LLM, call, json_of
 from .prompts import CHIEF_PLANNER, VERIFIER
@@ -553,6 +555,154 @@ async def _remember_episode(conn: AsyncConnection, task: Task, summary: str) -> 
         )
 
 
+# --- stage 4: carry out what the owner approved -----------------------------------
+
+
+async def approvals_decided(conn: AsyncConnection, task: Task) -> bool:
+    """True when this verified task had approvals and the owner has answered all of them."""
+    row = await (
+        await conn.execute(
+            """select count(*) as total,
+                      count(*) filter (where a.status = 'pending') as pending,
+                      bool_or(coalesce(t.verification ->> 'passed', 'false') = 'true') as verified
+               from public.approval_requests a join public.tasks t on t.id = a.task_id
+               where a.task_id = %s""",
+            (task.id,),
+        )
+    ).fetchone()
+    return row["total"] > 0 and row["pending"] == 0 and bool(row["verified"])
+
+
+async def finalize_approvals(
+    conn: AsyncConnection, task: Task, browser: BrowserService | None
+) -> None:
+    rows = await (
+        await conn.execute(
+            """select a.id::text, a.task_id::text, a.action, a.action_payload, a.action_hash,
+                      a.amount, a.currency, a.recipient, a.item, a.account_ref, a.expires_at,
+                      a.policy_version, a.status::text as status,
+                      i.id::text as inv_id, i.status as inv_status,
+                      coalesce(i.error, i.result_json ->> 'text') as inv_result
+               from public.approval_requests a
+               left join public.tool_invocations i on i.id = a.tool_invocation_id
+               where a.task_id = %s order by a.created_at""",
+            (task.id,),
+        )
+    ).fetchall()
+    lines: list[str] = []
+    failures = 0
+
+    async def finish_invocation(inv_id: str | None, ok: bool, text: str) -> None:
+        if inv_id:
+            await conn.execute(
+                "update public.tool_invocations set status = %s, result_json = %s, error = %s,"
+                " completed_at = now() where id = %s",
+                (
+                    "succeeded" if ok else "failed",
+                    Jsonb({"text": text}),
+                    None if ok else text,
+                    inv_id,
+                ),
+            )
+
+    for r in rows:
+        label = ACTION_LABELS.get(r["action"], r["action"])
+        if r["status"] == "approved":
+            try:
+                check_approval(binding_from_row(r), r["action_hash"], "approved")
+            except ApprovalError as exc:
+                await conn.execute(
+                    "update public.approval_requests set status = 'invalidated' where id = %s",
+                    (r["id"],),
+                )
+                await conn.execute(
+                    "insert into public.approval_events (workspace_id, approval_id, decision,"
+                    " reason) values (%s, %s, 'invalidated', %s)",
+                    (task.workspace_id, r["id"], str(exc)),
+                )
+                await finish_invocation(r["inv_id"], False, f"Not done: {exc}")
+                lines.append(f"⚠️ {label}: not done ({exc}).")
+                failures += 1
+                continue
+            # Mark it used *before* running: an approved action runs at most once.
+            async with conn.transaction():
+                claimed = await (
+                    await conn.execute(
+                        "update public.approval_requests set status = 'consumed'"
+                        " where id = %s and status = 'approved' returning id",
+                        (r["id"],),
+                    )
+                ).fetchone()
+                if claimed and r["inv_id"]:
+                    await conn.execute(
+                        "update public.tool_invocations set status = 'running',"
+                        " started_at = now() where id = %s",
+                        (r["inv_id"],),
+                    )
+            if not claimed:
+                continue
+            try:
+                text, ok = await execute_action(r["action"], r["action_payload"], browser), True
+            except NotConnected as exc:
+                text, ok = str(exc), False
+            except (BrowserError, BlockedURL, ValueError, KeyError) as exc:
+                text, ok = f"Couldn't do it: {exc}", False
+            await finish_invocation(r["inv_id"], ok, text)
+            await record_audit(
+                conn,
+                workspace_id=task.workspace_id,
+                actor_type="worker",
+                actor_id=None,
+                action="action.executed" if ok else "action.failed",
+                target_type="approval",
+                target_id=r["id"],
+                event={"action": r["action"], "result": text[:500]},
+            )
+            lines.append(f"{'✅' if ok else '⚠️'} {label}: {text}")
+            failures += 0 if ok else 1
+        elif r["status"] == "consumed" and r["inv_status"] == "running":
+            # A worker stopped while doing this; it may or may not have happened.
+            text = (
+                "Outcome unknown: the worker stopped while doing this. Please check before "
+                "trying again; it will not be repeated automatically."
+            )
+            await finish_invocation(r["inv_id"], False, text)
+            lines.append(f"⚠️ {label}: {text}")
+            failures += 1
+        elif r["status"] == "consumed":
+            ok = r["inv_status"] == "succeeded"
+            lines.append(f"{'✅' if ok else '⚠️'} {label}: {r['inv_result'] or 'done'}")
+            failures += 0 if ok else 1
+        elif r["status"] == "rejected":
+            lines.append(f"✖️ {label}: you declined, so it wasn't done.")
+        else:  # expired / invalidated
+            lines.append(f"⌛ {label}: no answer before it expired, so it wasn't done.")
+
+    previous = await (
+        await conn.execute("select result_summary from public.tasks where id = %s", (task.id,))
+    ).fetchone()
+    summary = "\n".join(lines) + (
+        f"\n\n{previous['result_summary']}" if previous["result_summary"] else ""
+    )
+    if failures:
+        await transition(
+            conn,
+            task,
+            "failed",
+            reason="approved action(s) not completed",
+            result_summary=summary,
+        )
+    else:
+        await transition(
+            conn,
+            task,
+            "verifying",
+            "completed",
+            reason="approvals handled",
+            result_summary=summary,
+        )
+
+
 # --- driver -----------------------------------------------------------------------
 
 
@@ -581,6 +731,9 @@ async def advance(
     if task.status in ("planned", "queued"):
         targets = ("queued", "running") if task.status == "planned" else ("running",)
         await transition(conn, task, *targets, reason="worker started")
+    if task.status == "running" and await approvals_decided(conn, task):
+        await finalize_approvals(conn, task, browser)
+        return (await load_task(conn, task_id)).status
     if task.status == "running":
         await run_steps(conn, llm, task, policy, browser)
     if task.status == "verifying":

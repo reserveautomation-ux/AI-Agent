@@ -251,9 +251,14 @@ class BrowserService:
         *,
         submit: bool = False,
         submit_text: str | None = None,
+        owner_approved: bool = False,
     ) -> FormResult:
-        """Fill a form by field label/name/placeholder. Submits only if ``submit``."""
-        if submit:
+        """Fill a form by field label/name/placeholder. Submits only if ``submit``.
+
+        Submitting needs the site on the owner's allowed list, or ``owner_approved``:
+        the owner approved this exact submission (URL and fields) in the approval centre.
+        """
+        if submit and not owner_approved:
             check_form_submission(url, self.policy)
         async with self._slots:
             ctx, _ = await self._new_context()

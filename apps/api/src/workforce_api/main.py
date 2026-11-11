@@ -6,7 +6,7 @@ from workforce_core.db import make_pool, sync_tool_definitions
 
 from .config import Settings, get_settings
 from .deps import ConnDep
-from .routes import memory, tasks, workforce, workspace
+from .routes import approvals, memory, tasks, workforce, workspace
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -43,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tasks.artifacts_router)
     app.include_router(workforce.router)
     app.include_router(memory.router)
+    app.include_router(approvals.router)
     return app
 
 

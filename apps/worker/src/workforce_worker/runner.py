@@ -208,6 +208,9 @@ async def worker_loop(
     worker_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
     async with await connect(settings.database_url) as conn:
         while not stop.is_set():
+            # Expire unanswered approvals and wake tasks whose approvals are all decided.
+            with contextlib.suppress(Exception):
+                await conn.execute("select public.expire_approvals()")
             claimed = await claim(conn, worker_id)
             if not claimed:
                 with contextlib.suppress(TimeoutError):

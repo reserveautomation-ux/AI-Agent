@@ -10,13 +10,12 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote_plus
 
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
-from workforce_core.approvals import ApprovalBinding, canonical_json
+from workforce_core.approvals import binding_for, canonical_json
 from workforce_core.db import record_audit
 from workforce_core.memory import MemoryRejected, format_for_prompt, recall, remember
 from workforce_core.policy import ActionContext, Decision, Policy, decide
@@ -205,24 +204,14 @@ class ToolGateway:
 
     async def _request_approval(self, inv_id: str, name: str, tier, args: dict) -> str:
         expires = datetime.now(UTC) + timedelta(seconds=self.ctx.policy.approval_ttl_seconds)
-        try:
-            amount = Decimal(str(args["amount"])) if "amount" in args else None
-        except InvalidOperation:
-            amount = None
-        recipient = args.get("to") or args.get("recipient") or args.get("network")
-        item = args.get("symbol") or args.get("offer_id") or args.get("subject")
-        binding = ApprovalBinding(
+        binding = binding_for(
             task_id=self.ctx.task_id,
             action=name,
-            payload=args,
-            amount=amount,
-            currency=args.get("currency"),
-            recipient=recipient,
-            item=item,
-            account_ref=None,
+            args=args,
             expires_at=expires,
             policy_version=self.ctx.policy.version,
         )
+        amount, recipient, item = binding.amount, binding.recipient, binding.item
         row = await (
             await self.conn.execute(
                 """insert into public.approval_requests

@@ -348,3 +348,221 @@ def test_device_registration(client, make_user, db):
     assert db.execute(
         "select disabled_at is not null from push_devices where token = %s", (token,)
     ).fetchone()[0]
+
+
+# --- approvals ----------------------------------------------------------------
+
+from datetime import UTC, datetime, timedelta  # noqa: E402
+
+from psycopg.types.json import Jsonb  # noqa: E402
+from workforce_core.approvals import binding_for, binding_from_row  # noqa: E402
+
+
+def _waiting_task(client, db, h):
+    task = client.post("/tasks", json={"objective": "Email Rahul"}, headers=h).json()
+    for s in ("planned", "queued", "running", "verifying", "waiting_for_approval"):
+        db.execute("update tasks set status = %s where id = %s", (s, task["id"]))
+    return task
+
+
+def _approval(db, ws, task_id, action="send_email", args=None, tier=2, expires_in=3600):
+    args = args or {"to": "rahul@example.com", "subject": "Review", "body": "Moved to Friday."}
+    expires = datetime.now(UTC) + timedelta(seconds=expires_in)
+    policy = db.execute(
+        "select id::text, version from policies where workspace_id = %s", (ws,)
+    ).fetchone()
+    b = binding_for(
+        task_id=task_id, action=action, args=args, expires_at=expires, policy_version=policy[1]
+    )
+    inv = db.execute(
+        "insert into tool_invocations (workspace_id, task_id, tool_name, risk_tier,"
+        " idempotency_key, arguments_hash, arguments_json, status)"
+        " values (%s, %s, %s, %s, gen_random_uuid()::text, %s, %s, 'awaiting_approval')"
+        " returning id::text",
+        (ws, task_id, action, tier, b.action_hash(), Jsonb(args)),
+    ).fetchone()[0]
+    return db.execute(
+        "insert into approval_requests (workspace_id, task_id, tool_invocation_id, action,"
+        " action_payload, action_hash, amount, currency, recipient, item, policy_id,"
+        " policy_version, risk_tier, expires_at) values"
+        " (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id::text",
+        (
+            ws,
+            task_id,
+            inv,
+            action,
+            Jsonb(args),
+            b.action_hash(),
+            b.amount,
+            b.currency,
+            b.recipient,
+            b.item,
+            policy[0],
+            policy[1],
+            tier,
+            expires,
+        ),
+    ).fetchone()[0]
+
+
+def _task_status(db, task_id):
+    return db.execute("select status::text from tasks where id = %s", (task_id,)).fetchone()[0]
+
+
+def test_approve_flow(client, make_user, db):
+    h = auth(make_user())
+    ws = client.get("/me", headers=h).json()["workspace"]["id"]
+    task = _waiting_task(client, db, h)
+    a1 = _approval(db, ws, task["id"])
+    a2 = _approval(
+        db, ws, task["id"], args={"to": "asha@example.com", "subject": "Hi", "body": "See you"}
+    )
+
+    pending = client.get("/approvals", headers=h).json()
+    assert {p["id"] for p in pending} == {a1, a2}
+    item = next(p for p in pending if p["id"] == a1)
+    assert item["task_title"] == "Email Rahul" and not item["owner_only"]
+
+    # Wrong hash = the owner saw something else -> refused.
+    r = client.post(f"/approvals/{a1}/approve", json={"action_hash": "0" * 64}, headers=h)
+    assert r.status_code == 409 and "changed" in r.text
+
+    r = client.post(
+        f"/approvals/{a1}/approve", json={"action_hash": item["action_hash"]}, headers=h
+    )
+    assert r.status_code == 200 and r.json()["status"] == "approved"
+    assert _task_status(db, task["id"]) == "waiting_for_approval"  # a2 still pending
+    assert (
+        client.post(
+            f"/approvals/{a1}/approve", json={"action_hash": item["action_hash"]}, headers=h
+        ).status_code
+        == 409
+    )  # already decided
+
+    item2 = next(p for p in pending if p["id"] == a2)
+    r = client.post(
+        f"/approvals/{a2}/reject",
+        json={"action_hash": item2["action_hash"], "reason": "not needed"},
+        headers=h,
+    )
+    assert r.json()["status"] == "rejected" and r.json()["execution_status"] == "denied"
+    assert _task_status(db, task["id"]) == "running"  # nothing left waiting -> worker resumes
+
+    decided = client.get("/approvals?state=decided", headers=h).json()
+    assert {d["status"] for d in decided} == {"approved", "rejected"}
+    events = db.execute(
+        "select decision from approval_events where approval_id in (%s, %s)", (a1, a2)
+    ).fetchall()
+    assert sorted(e[0] for e in events) == ["approved", "rejected"]
+
+
+def test_edit_then_approve_rebinds_exact_action(client, make_user, db):
+    h = auth(make_user())
+    ws = client.get("/me", headers=h).json()["workspace"]["id"]
+    task = _waiting_task(client, db, h)
+    aid = _approval(db, ws, task["id"])
+    old = client.get("/approvals", headers=h).json()[0]
+
+    r = client.post(
+        f"/approvals/{aid}/approve",
+        json={
+            "action_hash": old["action_hash"],
+            "changes": {"body": "Moved to Friday 4pm. Thanks!"},
+        },
+        headers=h,
+    )
+    assert r.status_code == 200, r.text
+    new = r.json()
+    assert new["action_payload"]["body"] == "Moved to Friday 4pm. Thanks!"
+    assert new["action_hash"] != old["action_hash"]
+    row = db.execute(
+        "select task_id, action, action_payload, amount, currency, recipient, item,"
+        " account_ref, expires_at, policy_version from approval_requests"
+        " where id = %s",
+        (aid,),
+    ).fetchone()
+    cols = [
+        "task_id",
+        "action",
+        "action_payload",
+        "amount",
+        "currency",
+        "recipient",
+        "item",
+        "account_ref",
+        "expires_at",
+        "policy_version",
+    ]
+    assert binding_from_row(dict(zip(cols, row, strict=True))).action_hash() == new["action_hash"]
+    args = db.execute(
+        "select arguments_json->>'body' from tool_invocations where task_id = %s", (task["id"],)
+    ).fetchone()[0]
+    assert args == "Moved to Friday 4pm. Thanks!"
+
+    # Only existing text fields can be edited.
+    aid2 = _approval(db, ws, task["id"])
+    h2 = next(p for p in client.get("/approvals", headers=h).json() if p["id"] == aid2)
+    r = client.post(
+        f"/approvals/{aid2}/approve",
+        json={"action_hash": h2["action_hash"], "changes": {"bcc": "x@y.z"}},
+        headers=h,
+    )
+    assert r.status_code == 422
+
+
+def test_tampering_and_expiry_are_caught(client, make_user, db):
+    h = auth(make_user())
+    ws = client.get("/me", headers=h).json()["workspace"]["id"]
+    task = _waiting_task(client, db, h)
+    aid = _approval(db, ws, task["id"])
+    shown = client.get("/approvals", headers=h).json()[0]["action_hash"]
+    # Someone changes the stored recipient without going through the system.
+    db.execute(
+        "update approval_requests set action_payload = action_payload ||"
+        ' \'{"to": "attacker@evil.example"}\' where id = %s',
+        (aid,),
+    )
+    r = client.post(f"/approvals/{aid}/approve", json={"action_hash": shown}, headers=h)
+    assert r.status_code == 409 and "integrity" in r.text
+
+    task2 = _waiting_task(client, db, h)
+    old = _approval(db, ws, task2["id"], expires_in=-5)
+    assert old not in [p["id"] for p in client.get("/approvals", headers=h).json()]
+    assert (
+        db.execute("select status::text from approval_requests where id = %s", (old,)).fetchone()[0]
+        == "expired"
+    )
+    assert _task_status(db, task2["id"]) == "running"
+
+
+def test_money_actions_need_the_owner(client, make_user, db):
+    owner, admin = make_user(), make_user()
+    h = auth(owner)
+    ws = client.get("/me", headers=h).json()["workspace"]["id"]
+    db.execute(
+        "insert into workspace_members (workspace_id, user_id, role) values (%s, %s, 'admin')",
+        (ws, admin),
+    )
+    task = _waiting_task(client, db, h)
+    aid = _approval(
+        db,
+        ws,
+        task["id"],
+        action="book_flight",
+        tier=3,
+        args={"offer_id": "off_1", "amount": 4999.5, "currency": "INR"},
+    )
+    item = client.get("/approvals", headers=h).json()[0]
+    assert item["owner_only"] and item["amount"] == "4999.5000"
+
+    admin_h = {**auth(admin), "X-Workspace-Id": ws}
+    r = client.post(
+        f"/approvals/{aid}/approve", json={"action_hash": item["action_hash"]}, headers=admin_h
+    )
+    assert r.status_code == 403
+    r = client.post(
+        f"/approvals/{aid}/approve", json={"action_hash": item["action_hash"]}, headers=h
+    )
+    assert r.status_code == 200
+    # Strangers can't see or decide it.
+    assert client.get("/approvals", headers=auth(make_user())).json() == []
