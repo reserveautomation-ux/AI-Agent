@@ -224,3 +224,7 @@ input[type="search"] { margin-bottom: 4px; }
 .fields dt { color: var(--muted); font-size: 0.8rem; }
 .fields dd { margin: 0; }
 .ok-text { color: var(--ok); }
+
+/* Connected accounts */
+.notice { background: var(--bg); border-left: 3px solid var(--ok); padding: 8px 12px; border-radius: 8px; }
+.connected { align-items: flex-start; }

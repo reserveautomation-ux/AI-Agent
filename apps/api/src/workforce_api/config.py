@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     # base64 of 32 random bytes; the worker needs the same value.
     token_encryption_key: str | None = None
     # Where the OAuth callback may send the owner back to, besides cors_origins.
-    app_redirect_schemes: list[str] = Field(default_factory=lambda: ["workforceos://"])
+    # The phone app's own scheme, plus the one Expo development builds use.
+    app_redirect_schemes: list[str] = Field(
+        default_factory=lambda: ["workforceos://", "exp+workforce-os://"]
+    )
 
     @property
     def gmail_configured(self) -> bool:

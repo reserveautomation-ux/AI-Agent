@@ -1,10 +1,10 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 
 import { ApprovalCard } from '@/components/ApprovalCard';
-import { Card, ErrorText, H, T, styles } from '@/components/ui';
-import { api, type ApprovalItem } from '@/lib/api';
+import { Button, Card, ErrorText, H, T, styles } from '@/components/ui';
+import { api, type ApprovalItem, type ProviderConnections } from '@/lib/api';
 import { useTheme } from '@/lib/theme';
 
 export default function ApprovalsScreen() {
@@ -13,15 +13,19 @@ export default function ApprovalsScreen() {
   const [decided, setDecided] = useState<ApprovalItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [gmailReady, setGmailReady] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const [p, d] = await Promise.all([
+      const [p, d, conns] = await Promise.all([
         api<ApprovalItem[]>('/approvals'),
         api<ApprovalItem[]>('/approvals?state=decided&limit=20'),
+        api<ProviderConnections[]>('/connections').catch(() => []),
       ]);
       setPending(p);
       setDecided(d);
+      const gmail = conns.find((x) => x.provider === 'gmail');
+      setGmailReady(!gmail || gmail.accounts.some((a) => a.status === 'active'));
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -61,6 +65,16 @@ export default function ApprovalsScreen() {
         until you approve the exact details below. Money actions need your fingerprint or Face ID.
       </T>
       <ErrorText>{error}</ErrorText>
+
+      {!gmailReady && pending?.some((a) => a.action === 'send_email') && (
+        <Card style={{ borderColor: c.warn, marginTop: 12 }}>
+          <T bold>Connect Gmail to send these emails</T>
+          <T small muted style={{ marginVertical: 6 }}>
+            Without it, approved emails are recorded but not sent.
+          </T>
+          <Button title="Connect Gmail" variant="ghost" onPress={() => router.push('/settings')} />
+        </Card>
+      )}
 
       <H>Waiting for you{pending && pending.length ? ` (${pending.length})` : ''}</H>
       {pending === null ? (

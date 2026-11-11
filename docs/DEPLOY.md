@@ -102,6 +102,39 @@ builds get them.
 4. On the phone: **Settings → Turn on notifications**, then close the app and give
    another instruction from the web; you should get a push when it finishes.
 
+## 5. Connect Gmail (so approved emails are really sent)
+
+One-time setup in Google Cloud (about 10 minutes):
+
+1. Go to **console.cloud.google.com**, create a project (e.g. "Workforce OS").
+2. **APIs & Services → Library**: enable the **Gmail API**.
+3. **Google Auth Platform → Branding / Audience** (the OAuth consent screen):
+   - User type **External**, app name "Workforce OS", your email as support contact.
+   - **Data access → Add scopes**: `openid`, `.../auth/userinfo.email` and
+     `.../auth/gmail.send` (*Send email on your behalf*). Nothing else.
+4. **Publishing status**: while the app is in **Testing**, add your Gmail as a *test
+   user*. Google then makes the connection **expire every 7 days** (you'd have to
+   reconnect weekly). To avoid that, click **Publish app**. Google shows an
+   "unverified app" warning on the sign-in screen (click *Advanced → continue*); that's
+   fine for your own use (up to 100 users without Google's verification).
+5. **Clients → Create client → Web application**:
+   - Authorized redirect URI: `https://<your-api>/connections/gmail/callback`
+     (e.g. `https://workforce-api.onrender.com/connections/gmail/callback`).
+   - Copy the **Client ID** and **Client secret**.
+6. Make an encryption key (keep it secret; it protects the stored Google tokens):
+   `python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"`
+7. In Render set, on **workforce-api**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+   `GOOGLE_REDIRECT_URI` (the URI from step 5) and `TOKEN_ENCRYPTION_KEY`; on
+   **workforce-worker**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and the **same**
+   `TOKEN_ENCRYPTION_KEY`.
+8. In the app: **Settings → Connect Gmail** (phone) or **Integrations → Connect Gmail**
+   (web), sign in with Google and allow *Send email on your behalf*.
+
+What the app can and can't do with Gmail: it can only **send** emails, and only ones you
+approve on the Approvals screen. It can't read, search or delete your mail. Tokens are
+stored encrypted; **Disconnect** revokes access at Google and deletes them. You can
+also remove access anytime at myaccount.google.com → Security → Third-party connections.
+
 ## Keeping it safe
 
 - Secrets live only in Render and Supabase settings, never in git or the apps.
@@ -119,4 +152,8 @@ builds get them.
 | Tasks stay in *Draft* | Worker not running, or missing `ANTHROPIC_API_KEY`; check the worker logs |
 | `prepared statement … does not exist` | Use the session pooler (5432) string |
 | Phone app can't connect | `EXPO_PUBLIC_API_URL` must be the public `https://` API URL |
+| "Gmail isn't set up on the server" | Set the Google variables and `TOKEN_ENCRYPTION_KEY` on the API and worker, redeploy |
+| Google says `redirect_uri_mismatch` | `GOOGLE_REDIRECT_URI` must exactly match the URI in the Google client |
+| Gmail stops working after a week | The Google app is still in *Testing*; publish it (step 5.4) and reconnect |
+| Approved email says "Reconnect Gmail" | Access was revoked or expired: Settings → Reconnect Gmail, then ask again |
 | No push notifications | Real phone + development/store build (not Expo Go), notifications allowed, FCM/APNs credentials set in EAS |

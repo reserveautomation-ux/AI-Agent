@@ -201,7 +201,7 @@ export interface Integration {
   key: string;
   name: string;
   category: string;
-  access: "official_api" | "partner_required" | "deep_link" | "internal";
+  access: "official_api" | "partner_required" | "deep_link" | "internal" | "browser";
   notes: string;
   tools: string[];
 }
@@ -330,4 +330,21 @@ export function decidedBadge(status: string, execution: string | null): [string,
   if (status === "invalidated") return ["Cancelled (changed)", "bad"];
   if (status === "approved") return ["Approved · running", "info"];
   return execution === "succeeded" ? ["Approved · done", "ok"] : ["Approved · not done", "warn"];
+}
+
+export interface ConnectedAccount {
+  id: string;
+  display_name: string | null;
+  status: "active" | "expired" | "error" | "revoked";
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+  last_error: string | null;
+}
+
+export interface ProviderConnections {
+  provider: string;
+  name: string;
+  configured: boolean;
+  accounts: ConnectedAccount[];
 }

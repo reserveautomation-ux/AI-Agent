@@ -1,22 +1,27 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApprovalCard } from "@/components/ApprovalCard";
-import { api, type ApprovalItem } from "@/lib/api";
+import { api, type ApprovalItem, type ProviderConnections } from "@/lib/api";
 
 export default function ApprovalsPage() {
   const [pending, setPending] = useState<ApprovalItem[] | null>(null);
   const [decided, setDecided] = useState<ApprovalItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [gmailReady, setGmailReady] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const [p, d] = await Promise.all([
+      const [p, d, conns] = await Promise.all([
         api<ApprovalItem[]>("/approvals"),
         api<ApprovalItem[]>("/approvals?state=decided&limit=20"),
+        api<ProviderConnections[]>("/connections").catch(() => []),
       ]);
       setPending(p);
       setDecided(d);
+      const gmail = conns.find((x) => x.provider === "gmail");
+      setGmailReady(!gmail || gmail.accounts.some((a) => a.status === "active"));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -41,6 +46,12 @@ export default function ApprovalsPage() {
         until you approve the exact details. You can edit the text before approving.
       </p>
       {error && <p className="error-text">{error}</p>}
+      {!gmailReady && pending?.some((a) => a.action === "send_email") && (
+        <div className="card notice">
+          <strong>Connect Gmail to send these emails.</strong> Without it, approved emails are
+          recorded but not sent. <Link href="/integrations">Connect Gmail →</Link>
+        </div>
+      )}
 
       <h2>Waiting for you{pending?.length ? ` (${pending.length})` : ""}</h2>
       {pending === null ? (

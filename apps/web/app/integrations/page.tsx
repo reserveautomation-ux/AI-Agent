@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ConnectedAccounts } from "@/components/ConnectedAccounts";
 import { api, type Integration } from "@/lib/api";
 
 const ACCESS_LABEL: Record<Integration["access"], [string, string]> = {
@@ -8,6 +9,7 @@ const ACCESS_LABEL: Record<Integration["access"], [string, string]> = {
   official_api: ["Official API", "ok"],
   partner_required: ["Partnership needed", "warn"],
   deep_link: ["You confirm in app", "info"],
+  browser: ["Sandboxed browser", "info"],
 };
 
 export default function IntegrationsPage() {
@@ -28,9 +30,11 @@ export default function IntegrationsPage() {
         action and you confirm it in the provider&apos;s app. They never pretend to complete it.
       </p>
       {error && <p className="error-text">{error}</p>}
+      <ConnectedAccounts />
+      <h2>All integrations</h2>
       <div className="grid">
         {items?.map((i) => {
-          const [label, tone] = ACCESS_LABEL[i.access];
+          const [label, tone] = ACCESS_LABEL[i.access] ?? [i.access, "muted"];
           return (
             <div key={i.key} className="agent">
               <div className="row">

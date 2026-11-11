@@ -86,7 +86,8 @@ PROVIDERS: tuple[Provider, ...] = (
         "Gmail",
         "communication",
         Access.OFFICIAL_API,
-        "Gmail API via Google OAuth (gmail.compose / gmail.send scopes).",
+        "Connect in Settings. Send-only permission (gmail.send): agents can send emails you "
+        "approve but can't read or delete your mail. Drafts stay in Workforce OS.",
     ),
     Provider(
         "google_calendar",

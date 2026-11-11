@@ -113,9 +113,18 @@ instruction ─► Chief plans (Claude, structured output, uses your memories)
 - After the owner decides, a worker re-checks each approval, marks it used *before* running it
   (so it happens at most once), carries it out, and reports the result. If a worker stops
   mid-action, the result is "outcome unknown" and it is never repeated automatically.
-- Today, web forms really submit (on the approved site). Email, WhatsApp, calendar, social,
-  flights, broker orders and store releases report "not connected yet" until their
-  integrations are added (next phase).
+- Today, **approved emails send through the owner's Gmail** and web forms really submit (on
+  the approved site). WhatsApp, calendar, social, flights, broker orders and store releases
+  report "not connected yet" until their integrations are added.
+
+## Connected accounts (Gmail)
+
+- OAuth web-server flow with PKCE and a single-use state; least privilege (`gmail.send` +
+  `openid email`: send only, can't read mail). Partial grants are refused and handed back.
+- Tokens are encrypted with AES-256-GCM (key only on API and worker, bound to workspace and
+  provider) before storage; browsers and apps can never read them (RLS, no policies).
+- The worker refreshes tokens as needed, sends exactly the approved message, marks the
+  connection expired if Google revokes it, and reports Gmail's own errors honestly.
 
 ## Agent lifecycle: clone the strong, retire the weak
 
@@ -166,7 +175,7 @@ Re-check each provider's current terms before enabling it.
 | **2. Agents at work** ✅ | Background workers; Chief plans with Claude; specialists use tools; verifier; files; held approvals |
 | **3. Approvals** ✅ | Approval centre (phone + web), edit wording then approve, Face ID / fingerprint for money, at-most-once execution, expiry |
 | 4. Reliability | Failure/restart tests, evaluations feeding the lifecycle, cost tracking, staging deploy |
-| 5. Email & calendar | Google OAuth connections |
+| **5. Gmail** ✅ | Connect Gmail (send only), approved emails really sent; calendar next |
 | **6. Mobile app** ✅ | Expo app (Android + iOS): native voice, push notifications, share files |
 | **6b. Deployment** ✅ | Dockerfiles, Render blueprint, graceful worker restarts, smoke check ([DEPLOY.md](DEPLOY.md)) |
 | 7. Software factory | Isolated build runners, web deploy, Play/App Store submission |

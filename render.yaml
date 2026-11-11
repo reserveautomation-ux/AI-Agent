@@ -19,6 +19,15 @@ services:
         sync: false
       - key: CORS_ORIGINS # JSON list with your web app URL, e.g. ["https://workforce-web.onrender.com"]
         sync: false
+      # Gmail (optional until you connect it; see docs/DEPLOY.md "Connect Gmail")
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI # https://<your-api>/connections/gmail/callback
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY # same value on the worker
+        sync: false
 
   # Agent worker: Chief planner, specialists, QA verifier, browser, push alerts
   - type: worker
@@ -33,6 +42,12 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: ANTHROPIC_API_KEY # from console.anthropic.com
+        sync: false
+      - key: GOOGLE_CLIENT_ID # same as the API
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY # same value as the API
         sync: false
       - key: WORKER_CONCURRENCY
         value: "2"

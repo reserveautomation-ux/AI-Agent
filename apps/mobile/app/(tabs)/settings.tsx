@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Platform, ScrollView, View } from 'react-native';
 
+import { ConnectedAccounts } from '@/components/ConnectedAccounts';
 import { Badge, Button, Card, ErrorText, H, T, styles } from '@/components/ui';
 import { API_URL, api, post, type Me } from '@/lib/api';
 import { registerForPush } from '@/lib/notifications';
@@ -74,6 +75,9 @@ export default function SettingsScreen() {
           </View>
         )}
       </Card>
+
+      <H>Connected accounts</H>
+      <ConnectedAccounts />
 
       <H>Emergency stop</H>
       <Card style={me?.workspace.kill_switch ? { borderColor: c.bad } : undefined}>

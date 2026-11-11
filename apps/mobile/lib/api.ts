@@ -238,3 +238,19 @@ export interface ApprovalItem {
   execution_result: string | null;
   owner_only: boolean;
 }
+
+export interface ConnectedAccount {
+  id: string;
+  display_name: string | null;
+  status: 'active' | 'expired' | 'error' | 'revoked';
+  scopes: string[];
+  last_used_at: string | null;
+  last_error: string | null;
+}
+
+export interface ProviderConnections {
+  provider: string;
+  name: string;
+  configured: boolean;
+  accounts: ConnectedAccount[];
+}
