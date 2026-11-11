@@ -10,7 +10,14 @@ from workforce_core.tools import TOOLS
 
 from ..auth import AdminDep, UserDep
 from ..deps import ConnDep
-from ..schemas import AuditEventOut, KillSwitchRequest, MeOut, TimezoneRequest, WorkspaceOut
+from ..schemas import (
+    AssistantIn,
+    AuditEventOut,
+    KillSwitchRequest,
+    MeOut,
+    TimezoneRequest,
+    WorkspaceOut,
+)
 
 router = APIRouter(tags=["workspace"])
 
@@ -25,9 +32,36 @@ async def _workspace(conn, user) -> WorkspaceOut:
     return WorkspaceOut(**row, role=user.role)
 
 
+async def assistant_name(conn, user) -> str:
+    row = await (
+        await conn.execute(
+            "select assistant_name from public.workspace_members"
+            " where user_id = %s and workspace_id = %s",
+            (user.user_id, user.workspace_id),
+        )
+    ).fetchone()
+    return row["assistant_name"] if row else "AI Assistant"
+
+
 @router.get("/me", response_model=MeOut)
 async def me(user: UserDep, conn: ConnDep) -> MeOut:
-    return MeOut(user_id=user.user_id, email=user.email, workspace=await _workspace(conn, user))
+    return MeOut(
+        user_id=user.user_id,
+        email=user.email,
+        workspace=await _workspace(conn, user),
+        assistant_name=await assistant_name(conn, user),
+    )
+
+
+@router.post("/me/assistant", response_model=MeOut)
+async def name_assistant(body: AssistantIn, user: UserDep, conn: ConnDep) -> MeOut:
+    """Give your assistant a name; it introduces itself by it from the next message."""
+    await conn.execute(
+        "update public.workspace_members set assistant_name = %s"
+        " where user_id = %s and workspace_id = %s",
+        (body.name, user.user_id, user.workspace_id),
+    )
+    return await me(user, conn)
 
 
 @router.post("/workspace/kill-switch", response_model=WorkspaceOut)

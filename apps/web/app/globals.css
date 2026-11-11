@@ -496,3 +496,35 @@ a.tool-title:hover { text-decoration: underline; }
   .composer { padding-left: 20px; }
   .send-btn { width: 48px; height: 48px; }
 }
+
+/* assistant name & voice */
+.title-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.title-btn:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 6px; }
+button.avatar { padding: 0; cursor: pointer; }
+.settings-scrim {
+  position: absolute; inset: 0; z-index: 30; background: rgb(20 20 20 / 0.35);
+  display: grid; place-items: center; padding: 16px; overflow-y: auto;
+}
+.settings-card {
+  width: 100%; max-width: 520px; border: 1px solid var(--p-line); border-radius: 28px; padding: 26px;
+  display: grid; gap: 14px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.2);
+}
+.settings-card h2 { font-family: var(--font-serif); font-weight: 400; font-size: 2.2rem; margin: -8px 0 4px; }
+.settings-card .mono-label.ruled { margin: 0; }
+.field { display: grid; gap: 6px; }
+.field input:not([type="range"]), .field select {
+  font: inherit; font-size: 1.05rem; color: var(--p-ink); background: var(--p-card); border: 1px solid var(--p-line);
+  border-radius: 14px; padding: 10px 14px; width: 100%;
+}
+.field input[type="range"] { width: 100%; accent-color: var(--p-teal); }
+.sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.name-ideas { display: flex; gap: 8px; flex-wrap: wrap; margin-top: -4px; }
+.suggest-chip {
+  background: var(--p-card); color: var(--p-ink); border: 1px solid var(--p-line); border-radius: 999px;
+  padding: 5px 14px; font-weight: 400; font-family: var(--font-sans);
+}
+.suggest-chip:hover { border-color: var(--p-teal); }
+.hint { color: var(--p-muted); font-size: 0.85rem; line-height: 1.5; margin: 0; }
+.settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.save-btn { background: var(--p-teal); color: var(--p-teal-ink); border-radius: 999px; padding: 10px 26px; }
+@media (max-width: 520px) { .sliders { grid-template-columns: 1fr; } .settings-card { padding: 20px; } }

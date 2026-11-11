@@ -14,8 +14,44 @@ export function speakable(text: string): string {
     .trim();
 }
 
+export interface VoicePrefs {
+  /** A voice from speechSynthesis.getVoices(); empty: the best match for the language. */
+  voiceURI: string;
+  rate: number; // 0.5–2
+  pitch: number; // 0–2
+}
+export const DEFAULT_VOICE: VoicePrefs = { voiceURI: "", rate: 1, pitch: 1 };
+
+/** Voices this browser has, best first: the chosen language, then the same language family. */
+export function voicesFor(lang: string): SpeechSynthesisVoice[] {
+  if (typeof window === "undefined" || !window.speechSynthesis) return [];
+  const base = lang.split("-")[0];
+  return window.speechSynthesis
+    .getVoices()
+    .filter((v) => v.lang.replace("_", "-").startsWith(base))
+    .sort((a, b) => Number(b.lang.replace("_", "-") === lang) - Number(a.lang.replace("_", "-") === lang) || a.name.localeCompare(b.name));
+}
+
+/** The browser's voice list loads late; this re-renders once it is ready. */
+export function useVoiceList(): number {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    if (!synth) return;
+    const update = () => setN(synth.getVoices().length);
+    update();
+    synth.addEventListener?.("voiceschanged", update);
+    return () => synth.removeEventListener?.("voiceschanged", update);
+  }, []);
+  return n;
+}
+
 /** The assistant's voice: the browser's built-in text-to-speech (free, works offline). */
-export function useSpeak() {
+export function useSpeak(prefs: VoicePrefs = DEFAULT_VOICE) {
+  const prefsRef = useRef(prefs);
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
   const [supported, setSupported] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const runRef = useRef(0);
@@ -43,10 +79,11 @@ export function useSpeak() {
       }
       synth.cancel();
       const run = ++runRef.current;
+      const { voiceURI, rate, pitch } = prefsRef.current;
       const voices = synth.getVoices();
       const voice =
-        voices.find((v) => v.lang === lang) ??
-        voices.find((v) => v.lang.startsWith(lang.split("-")[0])) ??
+        (voiceURI && voices.find((v) => v.voiceURI === voiceURI)) ||
+        voicesFor(lang)[0] ||
         null;
       // Short pieces: some browsers stop speaking long texts after ~15 seconds.
       const parts = clean.match(/[^.!?।]+[.!?।]*/g)?.map((p) => p.trim()).filter(Boolean) ?? [clean];
@@ -57,8 +94,10 @@ export function useSpeak() {
       };
       parts.forEach((part, i) => {
         const u = new SpeechSynthesisUtterance(part);
-        u.lang = lang;
+        u.lang = voice?.lang ?? lang;
         if (voice) u.voice = voice;
+        u.rate = rate;
+        u.pitch = pitch;
         if (i === parts.length - 1) {
           u.onend = finish;
           u.onerror = finish;

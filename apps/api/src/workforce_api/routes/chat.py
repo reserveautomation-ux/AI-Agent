@@ -21,6 +21,7 @@ from ..auth import CurrentUser, UserDep
 from ..deps import ConnDep, SettingsDep
 from ..schemas import TaskCreate
 from .tasks import WorkspaceStopped, insert_task
+from .workspace import assistant_name
 
 router = APIRouter(tags=["chat"])
 
@@ -233,6 +234,7 @@ async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, set
 
     pool: AsyncConnectionPool = request.app.state.pool
     who = user.email or "the user"
+    name = await assistant_name(conn, user)
 
     async def stream():
         yield _sse({"type": "conversation", "id": conv["id"], "title": conv["title"]})
@@ -246,6 +248,7 @@ async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, set
                     who=who,
                     query=body.content,
                     voice=body.via == "voice",
+                    name=name,
                 )
                 params = {
                     "model": settings.chat_model,

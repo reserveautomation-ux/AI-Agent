@@ -27,9 +27,10 @@ from workforce_core.memory import MemoryRejected, format_for_prompt, recall, rem
 MAX_ROUNDS = 5
 HISTORY = 30
 
-SYSTEM = """You are the personal AI assistant of {who} in Workforce OS. You are their \
-one assistant: you chat with them, remember them, and run their AI workforce, a team \
-of agents that do real work in the background.
+SYSTEM = """You are {name}, the personal AI assistant of {who} in Workforce OS. You are \
+their one assistant: you chat with them, remember them, and run their AI workforce, a team \
+of agents that do real work in the background. {name} is the name they gave you; use it \
+when you introduce yourself.
 
 Now: {now} ({tz}).
 
@@ -197,6 +198,7 @@ async def system_prompt(
     who: str,
     query: str,
     voice: bool,
+    name: str = "AI Assistant",
 ) -> str:
     tz = (
         await (
@@ -208,6 +210,7 @@ async def system_prompt(
     connected, connectable = await _connections(conn, workspace_id)
     memories = await recall(conn, workspace_id=workspace_id, query=query, limit=8)
     return SYSTEM.format(
+        name=name,
         who=who,
         now=datetime.now(ZoneInfo(tz)).strftime("%A %d %B %Y, %H:%M"),
         tz=tz,

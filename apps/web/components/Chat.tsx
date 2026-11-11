@@ -17,7 +17,8 @@ import {
   type Me,
 } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
-import { useSpeak } from "@/lib/useSpeak";
+import { DEFAULT_VOICE, useSpeak, type VoicePrefs } from "@/lib/useSpeak";
+import { AssistantSettings } from "@/components/AssistantSettings";
 import { useSpeech, VOICE_LANGUAGES } from "@/lib/useSpeech";
 
 const SUGGESTIONS = [
@@ -87,12 +88,15 @@ export function Chat() {
   activeRef.current = activeId;
   voiceRef.current = voice;
 
-  const tts = useSpeak();
+  const [voicePrefs, setVoicePrefs] = useState<VoicePrefs>(DEFAULT_VOICE);
+  const [customize, setCustomize] = useState(false);
+  const tts = useSpeak(voicePrefs);
   const { speak, stop: stopSpeaking } = tts;
 
   useEffect(() => {
     setLang(load("voice.lang", "en-IN"));
     setReadAloud(load("chat.readAloud", false));
+    setVoicePrefs(load("voice.prefs", DEFAULT_VOICE));
     api<Me>("/me").then(setMe).catch(() => {});
     api<Conversation[]>("/conversations").then(setConversations).catch((e) => setError(e.message));
   }, []);
@@ -305,6 +309,7 @@ export function Chat() {
   };
 
   const title = conversations.find((c) => c.id === activeId)?.title;
+  const assistantName = me?.assistant_name ?? "AI Assistant";
 
   return (
     <div className="chat paper">
@@ -345,6 +350,9 @@ export function Chat() {
           </button>
         </nav>
         <div className="side-foot">
+          <button className="text-btn" onClick={() => setCustomize(true)}>
+            Name &amp; voice of {assistantName}
+          </button>
           <label>
             <span className="mono-label">Voice</span>
             <select
@@ -382,12 +390,16 @@ export function Chat() {
 
       <section className="chat-main-col">
         <header className="asst-head">
-          <span className="avatar big" aria-hidden>
+          <button className="avatar big" onClick={() => setCustomize(true)} aria-label={`Customize ${assistantName}`} title="Name and voice">
             <FeatherIcon />
             <i className="avatar-dot" />
-          </span>
+          </button>
           <div className="asst-title">
-            <h1>AI Assistant</h1>
+            <h1>
+              <button className="title-btn" onClick={() => setCustomize(true)} title="Name and voice">
+                {assistantName}
+              </button>
+            </h1>
             <p className="mono-label">{title ? title : "Executive assistant"}</p>
           </div>
           <div className="asst-actions">
@@ -424,6 +436,7 @@ export function Chat() {
                 <MessageView
                   key={m.id}
                   m={m}
+                  name={assistantName}
                   tasks={tasks}
                   typing={streaming && idx === messages.length - 1 && m.role === "assistant"}
                   speaking={tts.speakingId === m.id}
@@ -488,6 +501,23 @@ export function Chat() {
         </div>
       </section>
 
+      {customize && (
+        <AssistantSettings
+          name={assistantName}
+          lang={lang}
+          prefs={voicePrefs}
+          onClose={() => setCustomize(false)}
+          onSaved={(n, l, v) => {
+            if (me) setMe({ ...me, assistant_name: n });
+            setLang(l);
+            save("voice.lang", l);
+            setVoicePrefs(v);
+            save("voice.prefs", v);
+            setCustomize(false);
+          }}
+        />
+      )}
+
       {voice !== "off" && (
         <div className="voice-mode paper" role="dialog" aria-label="Voice conversation">
           <p className="mono-label">Voice conversation</p>
@@ -535,12 +565,14 @@ function MessageView({
   typing,
   speaking,
   onSpeak,
+  name,
 }: {
   m: ChatMessage;
   tasks: Record<string, ChatTaskRef>;
   typing: boolean;
   speaking: boolean;
   onSpeak?: () => void;
+  name: string;
 }) {
   if (m.role === "user") {
     return (
@@ -559,7 +591,7 @@ function MessageView({
         </span>
         <div className="msg-body">
           <ToolCard t={t} description={m.content} />
-          <p className="mono-label who">Assistant · task update</p>
+          <p className="mono-label who">{name} · task update</p>
         </div>
       </div>
     );
@@ -599,7 +631,7 @@ function MessageView({
           </div>
         ))}
         <div className="who-row">
-          <p className="mono-label who">{m.via === "voice" ? "Assistant · voice transcript" : "Assistant"}</p>
+          <p className="mono-label who">{m.via === "voice" ? `${name} · voice transcript` : name}</p>
           {!typing && m.content && (
             <span className="msg-tools">
               <button onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>

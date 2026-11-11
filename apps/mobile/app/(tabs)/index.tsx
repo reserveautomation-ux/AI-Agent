@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AssistantSettings, DEFAULT_VOICE, type VoicePrefs } from '@/components/AssistantSettings';
 import { ChatText, speakable } from '@/components/ChatText';
 import { Icon, type IconName } from '@/components/ui';
 import {
@@ -94,6 +95,8 @@ export default function ChatScreen() {
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [voice, setVoice] = useState<VoiceState>('off');
   const [heard, setHeard] = useState('');
+  const [voicePrefs, setVoicePrefs] = useState<VoicePrefs>(DEFAULT_VOICE);
+  const [customize, setCustomize] = useState(false);
 
   const activeRef = useRef<string | null>(null);
   const voiceRef = useRef<VoiceState>('off');
@@ -116,10 +119,11 @@ export default function ChatScreen() {
   };
 
   useEffect(() => {
-    AsyncStorage.multiGet(['voice.lang', 'chat.readAloud'])
-      .then(([[, l], [, r]]) => {
+    AsyncStorage.multiGet(['voice.lang', 'chat.readAloud', 'voice.prefs'])
+      .then(([[, l], [, r], [, v]]) => {
         if (l) setLang(l);
         setReadAloud(r === '1');
+        if (v) setVoicePrefs({ ...DEFAULT_VOICE, ...JSON.parse(v) });
       })
       .catch(() => {});
     api<Me>('/me').then(setMe).catch(() => {});
@@ -145,6 +149,9 @@ export default function ChatScreen() {
       setSpeakingId(id);
       Speech.speak(clean, {
         language: lang,
+        voice: voicePrefs.voice || undefined,
+        rate: voicePrefs.rate,
+        pitch: voicePrefs.pitch,
         onDone: () => {
           setSpeakingId(null);
           onEnd?.();
@@ -156,7 +163,7 @@ export default function ChatScreen() {
         },
       });
     },
-    [lang],
+    [lang, voicePrefs],
   );
 
   const openConversation = useCallback(async (id: string | null) => {
@@ -341,16 +348,25 @@ export default function ChatScreen() {
   const first = me?.email?.split('@')[0]?.split(/[._-]/)[0];
   const greeting = first ? `How can I help, ${first[0].toUpperCase()}${first.slice(1)}?` : 'How can I help?';
   const title = conversations.find((x) => x.id === activeId)?.title;
+  const assistantName = me?.assistant_name ?? 'AI Assistant';
 
   return (
     <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
       <Grid />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: p.line }}>
-        <Avatar big />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontFamily: FONTS.serif, fontSize: 30, color: p.ink, lineHeight: 34 }}>AI Assistant</Text>
-          <Mono numberOfLines={1}>{title ?? 'Executive assistant'}</Mono>
-        </View>
+        <Pressable
+          onPress={() => setCustomize(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Name and voice of ${assistantName}`}
+          style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <Avatar big />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={{ fontFamily: FONTS.serif, fontSize: 30, color: p.ink, lineHeight: 34 }}>
+              {assistantName}
+            </Text>
+            <Mono numberOfLines={1}>{title ?? 'Executive assistant'}</Mono>
+          </View>
+        </Pressable>
         <IconButton icon={I.plus} label="New conversation" onPress={() => openConversation(null)} />
         <IconButton icon={I.menu} label="Show conversations" onPress={() => setListOpen(true)} />
       </View>
@@ -385,6 +401,7 @@ export default function ChatScreen() {
             renderItem={({ item, index }) => (
               <Message
                 m={item}
+                name={assistantName}
                 tasks={tasks}
                 typing={streaming && index === messages.length - 1 && item.role === 'assistant'}
                 speaking={speakingId === item.id}
@@ -461,6 +478,11 @@ export default function ChatScreen() {
           setLang(l);
           void setPref('voice.lang', l);
         }}
+        assistantName={assistantName}
+        onCustomize={() => {
+          setListOpen(false);
+          setCustomize(true);
+        }}
         readAloud={readAloud}
         onReadAloud={(v) => {
           setReadAloud(v);
@@ -468,6 +490,24 @@ export default function ChatScreen() {
           if (!v) stopSpeaking();
         }}
       />
+
+      {customize && (
+        <AssistantSettings
+          open
+          name={assistantName}
+          lang={lang}
+          prefs={voicePrefs}
+          onClose={() => setCustomize(false)}
+          onSaved={(n, l, v) => {
+            if (me) setMe({ ...me, assistant_name: n });
+            setLang(l);
+            setVoicePrefs(v);
+            void setPref('voice.lang', l);
+            void setPref('voice.prefs', JSON.stringify(v));
+            setCustomize(false);
+          }}
+        />
+      )}
 
       <Modal visible={voice !== 'off'} animationType="fade" onRequestClose={endVoice}>
         <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', gap: 18, padding: 24 }}>
@@ -566,7 +606,7 @@ function SendButton({ icon, label, onPress, active }: { icon: IconName; label: s
   );
 }
 
-function Message({ m, tasks, typing, speaking, onSpeak }: { m: ChatMessage; tasks: Record<string, ChatTaskRef>; typing: boolean; speaking: boolean; onSpeak: () => void }) {
+function Message({ m, tasks, typing, speaking, onSpeak, name }: { m: ChatMessage; tasks: Record<string, ChatTaskRef>; typing: boolean; speaking: boolean; onSpeak: () => void; name: string }) {
   const p = usePaper();
   if (m.role === 'user') {
     return (
@@ -585,7 +625,7 @@ function Message({ m, tasks, typing, speaking, onSpeak }: { m: ChatMessage; task
         <Avatar />
         <View style={{ flex: 1, gap: 8 }}>
           <ToolCard t={t} description={m.content} />
-          <Mono>Assistant · task update</Mono>
+          <Mono>{name} · task update</Mono>
         </View>
       </View>
     );
@@ -609,7 +649,7 @@ function Message({ m, tasks, typing, speaking, onSpeak }: { m: ChatMessage; task
           <Card2 key={x} icon={I.book} iconColor={p.terra} title={x} label="Saved to memory" />
         ))}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <Mono>{m.via === 'voice' ? 'Assistant · voice transcript' : 'Assistant'}</Mono>
+          <Mono>{m.via === 'voice' ? `${name} · voice transcript` : name}</Mono>
           {!typing && !!m.content && (
             <>
               <Pressable onPress={() => Clipboard.setStringAsync(m.content)} accessibilityRole="button" accessibilityLabel="Copy" hitSlop={8}>
@@ -721,6 +761,8 @@ function ChatList(props: {
   onLang: (l: string) => void;
   readAloud: boolean;
   onReadAloud: (v: boolean) => void;
+  assistantName: string;
+  onCustomize: () => void;
 }) {
   const p = usePaper();
   const insets = useSafeAreaInsets();
@@ -754,6 +796,9 @@ function ChatList(props: {
           </ScrollView>
           <Mono>Long-press a chat to delete it</Mono>
           <View style={{ borderTopWidth: 1, borderTopColor: p.line, paddingTop: 12, gap: 12 }}>
+            <Pressable onPress={props.onCustomize} accessibilityRole="button" hitSlop={6}>
+              <Text style={{ fontFamily: FONTS.sansBold, color: p.teal, fontSize: 16 }}>Name & voice of {props.assistantName}</Text>
+            </Pressable>
             <Pressable onPress={() => setLangOpen((v) => !v)} accessibilityRole="button" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Mono>Voice</Mono>
               <Text style={[body, { fontFamily: FONTS.sansMedium }]}>{VOICE_LANGUAGES.find((l) => l.code === props.lang)?.label ?? props.lang}</Text>

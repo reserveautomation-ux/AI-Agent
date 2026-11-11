@@ -167,6 +167,8 @@ export interface Me {
   user_id: string;
   email: string | null;
   workspace: { id: string; name: string; role: string; kill_switch: boolean; timezone: string };
+  /** What this person named their assistant. */
+  assistant_name: string;
 }
 
 export interface Capability {

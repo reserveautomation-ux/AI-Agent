@@ -131,6 +131,21 @@ class MeOut(BaseModel):
     user_id: str
     email: str | None
     workspace: WorkspaceOut
+    assistant_name: str = "AI Assistant"
+
+
+class AssistantIn(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+
+    @field_validator("name")
+    @classmethod
+    def clean(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if not v:
+            raise ValueError("name must not be blank")
+        if any(ch in v for ch in "<>{}`"):
+            raise ValueError("please use letters, numbers and simple punctuation")
+        return v
 
 
 class KillSwitchRequest(BaseModel):

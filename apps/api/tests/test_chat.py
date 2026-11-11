@@ -99,7 +99,7 @@ def test_streams_a_reply_and_keeps_the_conversation(make_client, make_user, db):
     # The model got the person's context and safe defaults.
     p = model.calls[0]
     assert p["messages"] == [{"role": "user", "content": "Hi there, I'm Asha from Pune"}]
-    assert "personal AI assistant of owner@example.com" in p["system"]
+    assert "You are AI Assistant, the personal AI assistant of owner@example.com" in p["system"]
     assert "Connected services: none yet" in p["system"] and "Gmail" in p["system"]
     assert p["thinking"] == {"type": "adaptive"} and p["output_config"] == {"effort": "low"}
     assert {t["name"] for t in p["tools"]} == {"start_task", "remember", "web_search"}
@@ -296,3 +296,18 @@ def test_model_error_keeps_what_was_said(make_client, make_user):
     conv = events[0]["id"]
     last = client.get(f"/conversations/{conv}", headers=h).json()["messages"][-1]
     assert last["content"] == "Partial ans" and last["meta"]["interrupted"] is True
+
+
+def test_name_your_assistant(make_client, make_user):
+    model = FakeChat(say("Hi, I'm Maya."))
+    client = make_client(model)
+    h = auth(make_user())
+    assert client.get("/me", headers=h).json()["assistant_name"] == "AI Assistant"
+    r = client.post("/me/assistant", json={"name": "  Maya  "}, headers=h)
+    assert r.status_code == 200 and r.json()["assistant_name"] == "Maya"
+    send(client, h, "Who are you?")
+    assert model.calls[0]["system"].startswith("You are Maya, the personal AI assistant")
+    for bad in ("", "   ", "x" * 41, "<script>"):
+        assert client.post("/me/assistant", json={"name": bad}, headers=h).status_code == 422
+    # Each person names their own: someone else still has the default.
+    assert client.get("/me", headers=auth(make_user())).json()["assistant_name"] == "AI Assistant"
