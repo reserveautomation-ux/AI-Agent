@@ -153,18 +153,24 @@ instruction ─► Chief plans (Claude, structured output, uses your memories)
 
 ## Integrations: what is actually possible
 
-See `integrations.py` and the **Integrations** page. Summary:
+See `connectors.py` (the catalog) and the **Connections** page. People connect services
+only when they need them: OAuth sign-in (Google, Slack) or a key checked with the provider
+(WhatsApp, Telegram, GitHub, Vercel), stored encrypted per workspace. A task that needs an
+unconnected service is set to `blocked` with `waiting_for_connection`; connecting calls
+`wake_tasks_for_connection()`, which puts it back in the queue (approvals are kept, not used
+up). Summary:
 
 | Want | How | Status |
 |---|---|---|
 | Research | Claude web search/fetch | Official API |
 | Data analysis, documents, charts | Claude code execution sandbox | Official API |
 | Pages needing a real browser, web forms | Sandboxed Playwright browser | Only on sites whose terms allow automation |
-| WhatsApp | WhatsApp Business Cloud API | Official API; business number + approved templates |
+| WhatsApp | WhatsApp Business Cloud API | **Live** (approved messages); business number; templates outside the 24-hour window |
+| Telegram, Slack | Bot API / Slack Web API | **Live** (approved messages) |
 | Social posts | LinkedIn / X / Instagram APIs | Official API; per-network app approval |
 | Google Drive / Sheets | Google APIs (OAuth) | Official API |
-| Email, calendar | Gmail / Google Calendar API (OAuth) | Official API |
-| Build & deploy websites | GitHub + Vercel APIs | Official API |
+| Email, calendar | Gmail / Google Calendar API (OAuth) | **Live** |
+| Build & deploy websites | GitHub + Vercel APIs | **Live** (save files to a repo, publish to `*.vercel.app`) |
 | Play Store / App Store | Google Play Publishing API, App Store Connect API + macOS build runner | Official API; store review applies |
 | Stocks (India) | Zerodha Kite Connect (or similar broker API) | Official API, paid; SEBI algo rules apply, so research and alerts come first |
 | Flights | Duffel | Official API |
@@ -185,9 +191,11 @@ Re-check each provider's current terms before enabling it.
 | **5. Gmail + Calendar** ✅ | Gmail (send only) and Google Calendar (free/busy + create approved events) |
 | **6. Mobile app** ✅ | Expo app (Android + iOS): native voice, push notifications, share files |
 | **6b. Deployment** ✅ | Dockerfiles, Render blueprint, graceful worker restarts, smoke check ([DEPLOY.md](DEPLOY.md)) |
-| 7. Software factory | Isolated build runners, web deploy, Play/App Store submission |
-| 8. Travel & commerce | Flights via API; rides/food/movies via confirm-in-app links |
-| 9. Finance | Market research and alerts, then broker orders after compliance review |
+| **7. Connections** ✅ | Open sign-up, catalog of services, connect-when-needed (tasks wait and resume), WhatsApp, Telegram, Slack, GitHub, Vercel |
+| 8. Billing | Plans and payments (web checkout; App Store / Play billing on phones), usage limits |
+| 9. Software factory | Isolated build runners, Play/App Store submission |
+| 10. Travel & commerce | Flights via API; rides/food/movies via confirm-in-app links |
+| 11. Finance | Market research and alerts, then broker orders after compliance review |
 
 ## Review changes from the original blueprint
 

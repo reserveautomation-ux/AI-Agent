@@ -34,16 +34,20 @@ Anthropic before you start; you can set a per-task budget in the app.
    npx supabase link --project-ref <your-project-ref>
    npx supabase db push
    ```
-3. **Authentication → Sign In / Providers → Email**: keep Email enabled and turn
-   **off** "Allow new users to sign up" so only you (and people you invite) get in.
-4. **Authentication → Users → Invite user**: invite your own email. Your workspace,
-   owner role and default safety policy are created automatically.
-5. **Authentication → Email Templates → Magic Link**: add the 6-digit code for the
+3. **Authentication → Sign In / Providers → Email**: keep Email enabled and leave
+   **"Allow new users to sign up" on**, so anyone can create an account with just their
+   email (each person gets their own private workspace, owner role and safety policy,
+   created automatically). Turn it **off** if you want invite-only.
+4. Sign in once with your own email (or **Authentication → Users → Invite user**).
+5. **Authentication → Rate Limits / SMTP**: Supabase's built-in email sender only sends
+   a few emails an hour. Before opening sign-up to the public, set up your own SMTP
+   (e.g. Resend, Amazon SES, Brevo) under **Authentication → Emails → SMTP Settings**.
+6. **Authentication → Email Templates → Magic Link**: add the 6-digit code for the
    phone app, e.g. `<p>Your code: <strong>{{ .Token }}</strong></p>` (keep the link
    for the web app).
-6. **Authentication → URL Configuration**: add your web app URL (step 2 below) to
+7. **Authentication → URL Configuration**: add your web app URL (step 2 below) to
    the redirect URLs.
-7. Collect these values:
+8. Collect these values:
    - **Project URL** `https://<ref>.supabase.co`
    - **Publishable (anon) key**: safe in apps; row-level security protects data
    - **Database connection string**: Connect → *Session pooler* (port 5432).
@@ -131,10 +135,10 @@ One-time setup in Google Cloud (about 10 minutes):
    `GOOGLE_REDIRECT_URI` (the URI from step 5) and `TOKEN_ENCRYPTION_KEY`; on
    **workforce-worker**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and the **same**
    `TOKEN_ENCRYPTION_KEY`.
-8. In the app: **Settings → Connect Gmail / Connect Google Calendar** (phone) or
-   **Integrations** (web). Sign in with Google and allow what each asks for. Each is a
+8. In the app: **Connections** (web menu, or Settings → Open Connections on the phone)
+   → **Connect Gmail / Connect Google Calendar**. Sign in with Google and allow what each asks for. Each is a
    separate connection you can disconnect on its own.
-9. Check your **time zone** (Settings on the phone, Integrations on the web). It defaults
+9. Check your **time zone** (Settings on the phone, Connections on the web). It defaults
    to India (IST); meetings and "next Friday" use it.
 
 What the app can and can't do:
@@ -145,6 +149,44 @@ What the app can and can't do:
   the approval card says so. Tokens are
 stored encrypted; **Disconnect** revokes access at Google and deletes them. You can
 also remove access anytime at myaccount.google.com → Security → Third-party connections.
+
+## 6. Other connections (WhatsApp, Telegram, Slack, GitHub, Vercel)
+
+Everyone connects their **own** accounts in **Connections**, only when they need them.
+If a task needs a service that isn't connected, it pauses, tells them which one, and
+carries on by itself once they connect it. All keys and sign-ins are checked with the
+provider first, then stored encrypted with `TOKEN_ENCRYPTION_KEY` (step 5.6), so set
+that key on the API and worker even if you skip Google.
+
+**No server setup needed** (each person pastes their own key; the app shows where to
+find it):
+
+| Service | What they paste | What agents can do (after approval) |
+|---|---|---|
+| Telegram | Bot token from @BotFather | Message people who have started a chat with the bot |
+| WhatsApp | Meta access token + phone number ID (WhatsApp Business Platform) | Message people who wrote to them in the last 24 hours |
+| GitHub | Fine-grained token (Contents + Administration: read/write) | Create a repository and save the website/app files a task made |
+| Vercel | Account token | Publish a website a task made, at a `*.vercel.app` address |
+
+**Slack** uses "Sign in with Slack" and needs a one-time Slack app:
+
+1. **api.slack.com/apps → Create New App → From scratch**.
+2. **OAuth & Permissions**: redirect URL `https://<your-api>/connections/oauth/callback`;
+   bot token scopes `chat:write`, `chat:write.public`, `channels:read`.
+3. **Manage Distribution → Activate Public Distribution** if people outside your own
+   Slack workspace should be able to connect.
+4. On **workforce-api** set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` (Basic Information
+   → App Credentials) and `OAUTH_REDIRECT_URI` (the URL from step 2).
+
+Services without a public API (Uber, Ola, Rapido, Swiggy, Zomato, Amazon, Flipkart,
+BookMyShow, IRCTC) are listed as **Opens their app**: agents find the option and prepare
+a link; the person confirms and pays in that app. Services marked **Coming soon**
+(Outlook, Notion, Google Drive, Play Store, App Store, brokers, flights) are not
+connectable yet.
+
+**Opening the app to the public:** Google allows 100 users on an unverified app; beyond
+that, submit the app for Google's verification (Gmail send counts as a *sensitive* scope).
+Slack needs public distribution (step 3). Everything else uses each person's own key.
 
 ## Keeping it safe
 
@@ -165,7 +207,11 @@ also remove access anytime at myaccount.google.com → Security → Third-party 
 | Phone app can't connect | `EXPO_PUBLIC_API_URL` must be the public `https://` API URL |
 | "Gmail isn't set up on the server" | Set the Google variables and `TOKEN_ENCRYPTION_KEY` on the API and worker, redeploy |
 | Google says `redirect_uri_mismatch` | `GOOGLE_REDIRECT_URI` must exactly match the URI in the Google client (`…/connections/google/callback`) |
-| Meeting at the wrong time | Set your time zone in Settings / Integrations |
+| Meeting at the wrong time | Set your time zone in Settings (phone) / Connections (web) |
+| A task says "waiting for you to connect …" | Open Connections, connect that service; the task resumes by itself within a few seconds |
+| A service shows "Not set up on server" | Google/Slack: set their client ID/secret and redirect variables; key services: set `TOKEN_ENCRYPTION_KEY` on API and worker |
+| Slack says `bad_redirect_uri` | `OAUTH_REDIRECT_URI` must exactly match the Slack app's redirect URL (`…/connections/oauth/callback`) |
+| New people can't sign up | Supabase → Email provider → "Allow new users to sign up" on; set up SMTP if codes don't arrive |
 | Gmail or Calendar stops working after a week | The Google app is still in *Testing*; publish it (step 5.4) and reconnect |
-| Approved email says "Reconnect Gmail" | Access was revoked or expired: Settings → Reconnect Gmail, then ask again |
+| Task waiting with "Reconnect Gmail" | Access was revoked or expired: Connections → Reconnect Gmail; the task then continues |
 | No push notifications | Real phone + development/store build (not Expo Go), notifications allowed, FCM/APNs credentials set in EAS |

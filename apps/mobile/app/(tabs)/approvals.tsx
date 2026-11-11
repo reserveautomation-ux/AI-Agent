@@ -5,7 +5,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { ApprovalCard } from '@/components/ApprovalCard';
 import { Button, Card, ErrorText, H, T, styles } from '@/components/ui';
 import { api, type ApprovalItem, type ProviderConnections } from '@/lib/api';
-import { ACTION_SERVICE } from '@/lib/labels';
+import { ACTION_SERVICE, joinNames } from '@/lib/labels';
 import { useTheme } from '@/lib/theme';
 
 export default function ApprovalsScreen() {
@@ -14,7 +14,7 @@ export default function ApprovalsScreen() {
   const [decided, setDecided] = useState<ApprovalItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [missing, setMissing] = useState<string[]>([]);
+  const [missing, setMissing] = useState<{ provider: string; name: string }[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -30,9 +30,8 @@ export default function ApprovalsScreen() {
       );
       const needed = p
         .map((a) => ACTION_SERVICE[a.action])
-        .filter((svc) => svc && notReady.has(svc.provider))
-        .map((svc) => svc.name);
-      setMissing([...new Set(needed)]);
+        .filter((svc) => svc && notReady.has(svc.provider));
+      setMissing([...new Map(needed.map((svc) => [svc.provider, svc])).values()]);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -75,11 +74,17 @@ export default function ApprovalsScreen() {
 
       {missing.length > 0 && (
         <Card style={{ borderColor: c.warn, marginTop: 12 }}>
-          <T bold>Connect {missing.join(' and ')} first</T>
+          <T bold>Connect {joinNames(missing.map((m) => m.name))} to carry these out</T>
           <T small muted style={{ marginVertical: 6 }}>
-            Without it, approved actions are recorded but not carried out.
+            You can still approve now: the action waits and happens as soon as it&apos;s connected.
           </T>
-          <Button title="Open Settings" variant="ghost" onPress={() => router.push('/settings')} />
+          <Button
+            title="Connect"
+            variant="ghost"
+            onPress={() =>
+              router.push({ pathname: '/connections', params: { need: missing.map((m) => m.provider).join(',') } })
+            }
+          />
         </Card>
       )}
 

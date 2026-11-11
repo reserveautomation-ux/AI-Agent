@@ -1,8 +1,7 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 
-import { ConnectedAccounts } from '@/components/ConnectedAccounts';
 import { Badge, Button, Card, ErrorText, H, T, styles } from '@/components/ui';
 import { API_URL, api, post, type Me } from '@/lib/api';
 import { TIMEZONES } from '@/lib/labels';
@@ -120,8 +119,12 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      <H>Connected accounts</H>
-      <ConnectedAccounts />
+      <H>Connections</H>
+      <Card>
+        <T>Gmail, Calendar, WhatsApp, Telegram, Slack, GitHub, Vercel and more. Connect only what you need.</T>
+        <View style={{ height: 10 }} />
+        <Button title="Open Connections" onPress={() => router.push('/connections')} />
+      </Card>
 
       <H>Emergency stop</H>
       <Card style={me?.workspace.kill_switch ? { borderColor: c.bad } : undefined}>

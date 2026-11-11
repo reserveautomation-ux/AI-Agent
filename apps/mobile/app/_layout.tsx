@@ -77,6 +77,7 @@ function RootNav() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="tasks/[id]" options={{ title: 'Task', headerBackTitle: 'Back' }} />
+        <Stack.Screen name="connections" options={{ title: 'Connections', headerBackTitle: 'Back' }} />
       </Stack>
     </ThemeProvider>
   );

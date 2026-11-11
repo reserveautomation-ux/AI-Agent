@@ -47,6 +47,7 @@ class TaskOut(BaseModel):
     updated_at: datetime
     completed_at: datetime | None
     cost_usd: Decimal = Decimal(0)
+    waiting_for_connection: list[str] = []  # services to connect before it can continue
 
 
 class TaskEventOut(BaseModel):

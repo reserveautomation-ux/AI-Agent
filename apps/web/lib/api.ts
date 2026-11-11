@@ -71,6 +71,8 @@ export interface Task {
   updated_at: string;
   completed_at: string | null;
   cost_usd: string;
+  /** Services to connect before the task can continue (it then resumes by itself). */
+  waiting_for_connection?: string[];
 }
 
 export interface TaskEvent {
@@ -369,7 +371,77 @@ export interface ProviderConnections {
 export const ACTION_SERVICE: Record<string, { provider: string; name: string }> = {
   send_email: { provider: "gmail", name: "Gmail" },
   calendar_create_event: { provider: "google_calendar", name: "Google Calendar" },
+  send_whatsapp: { provider: "whatsapp", name: "WhatsApp" },
+  send_telegram: { provider: "telegram", name: "Telegram" },
+  post_slack: { provider: "slack", name: "Slack" },
+  github_save_files: { provider: "github", name: "GitHub" },
+  deploy_web: { provider: "vercel", name: "Vercel" },
 };
+
+export interface ConnectorField {
+  key: string;
+  label: string;
+  secret: boolean;
+  help: string;
+  placeholder: string;
+}
+
+/** One service in the Connections catalog. */
+export interface Connector {
+  key: string;
+  name: string;
+  category: string;
+  icon: string;
+  description: string;
+  /** oauth2: sign in · api_key: paste a key · deep_link: opens their app · builtin: nothing to do */
+  auth: "oauth2" | "api_key" | "deep_link" | "builtin";
+  live: boolean;
+  /** Can be connected on this server right now. */
+  available: boolean;
+  plan: string;
+  note: string;
+  how_to_get: string;
+  open_url: string;
+  /** Everyday words for search ("cab", "food"). */
+  keywords: string;
+  fields: ConnectorField[];
+  accounts: ConnectedAccount[];
+}
+
+export type ConnectorState = "connected" | "expired" | "ready" | "unavailable" | "soon" | "app" | "builtin";
+
+export function connectorState(c: Connector): ConnectorState {
+  if (c.auth === "builtin") return "builtin";
+  if (c.auth === "deep_link") return "app";
+  if (!c.live) return "soon";
+  if (c.accounts.some((a) => a.status === "active")) return "connected";
+  if (c.accounts.length) return "expired";
+  return c.available ? "ready" : "unavailable";
+}
+
+export const STATE_BADGE: Record<ConnectorState, [string, "ok" | "warn" | "info" | "muted" | "bad"]> = {
+  connected: ["Connected", "ok"],
+  expired: ["Reconnect", "warn"],
+  ready: ["Not connected", "muted"],
+  unavailable: ["Not set up on server", "muted"],
+  soon: ["Coming soon", "muted"],
+  app: ["Opens their app", "info"],
+  builtin: ["Built in", "ok"],
+};
+
+const SERVICE_NAMES: Record<string, string> = Object.fromEntries(
+  Object.values(ACTION_SERVICE).map((s) => [s.provider, s.name]),
+);
+
+/** Display name for a service key (gmail → Gmail, google_calendar → Google Calendar). */
+export function serviceName(key: string): string {
+  return SERVICE_NAMES[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+/** Human list: "Gmail", "Gmail and Slack", "Gmail, Slack and GitHub". */
+export function joinNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
 
 export const TIMEZONES: { zone: string; label: string }[] = [
   { zone: "Asia/Kolkata", label: "India (IST)" },

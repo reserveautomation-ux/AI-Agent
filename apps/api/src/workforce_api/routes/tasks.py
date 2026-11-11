@@ -24,7 +24,8 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 TASK_COLUMNS = """
     id::text, title, objective, status, priority, deadline, budget_limit_usd,
-    result_summary, created_by::text, created_at, updated_at, completed_at, cost_usd
+    result_summary, created_by::text, created_at, updated_at, completed_at, cost_usd,
+    waiting_for_connection
 """
 
 

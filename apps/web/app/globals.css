@@ -90,6 +90,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 button.ghost { background: transparent; color: var(--text); border-color: var(--border); }
 button.danger { background: var(--bad); color: #fff; }
 button.small { padding: 4px 10px; font-size: 0.8rem; font-weight: 500; }
+a.button {
+  display: inline-block; text-decoration: none; border-radius: 10px; padding: 9px 16px;
+  background: var(--brand); color: var(--bg); font-weight: 600;
+}
 
 .command { display: grid; gap: 10px; }
 .command label { font-weight: 600; font-size: 1.05rem; }
@@ -230,3 +234,9 @@ input[type="search"] { margin-bottom: 4px; }
 .connected { align-items: flex-start; }
 .service { padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--border); }
 .check select { font: inherit; font-size: 0.85rem; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 4px 6px; }
+.conn-toolbar { margin: 12px 0 8px; }
+.conn-toolbar input[type="search"] { flex: 1 1 260px; min-width: 0; }
+.chip-on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.conn { display: grid; gap: 6px; align-content: start; }
+.conn-needed { border-color: var(--warn); box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 35%, transparent); }
+.wait-card { border-left: 3px solid var(--warn); background: var(--bg); padding: 10px 14px; border-radius: 8px; margin: 12px 0; display: grid; gap: 8px; }

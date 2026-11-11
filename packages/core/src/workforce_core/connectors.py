@@ -66,6 +66,11 @@ class Connector:
     note: str = ""  # honest limitations
     open_url: str = ""  # deep links: the app/site the person confirms in
 
+    @property
+    def keywords(self) -> str:
+        """Everyday words people search with ("cab", "food", "website")."""
+        return CATEGORY_WORDS.get(self.category, "")
+
     def configured(self) -> bool:
         """Can people connect this on this server right now?"""
         if not self.live:
@@ -75,6 +80,19 @@ class Connector:
             return bool(os.environ.get(f"{p}_CLIENT_ID") and os.environ.get(f"{p}_CLIENT_SECRET"))
         return True
 
+
+CATEGORY_WORDS = {
+    "Communication": "email mail message chat text sms calendar meeting schedule invite team",
+    "Build & deploy": "website site app code repository host publish deploy launch store",
+    "Documents": "files docs notes drive storage",
+    "Money": "stocks shares invest trading broker portfolio",
+    "Travel": "flight hotel trip travel booking",
+    "Marketing": "social post instagram linkedin twitter x facebook",
+    "Rides": "cab taxi ride auto bike car pickup",
+    "Food & shopping": "food order delivery restaurant grocery shopping buy",
+    "Tickets": "movie cinema train ticket booking show",
+    "Built in": "search web research browse browser files memory",
+}
 
 G = "https://www.googleapis.com/auth/"
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"

@@ -249,6 +249,7 @@ def test_catalog_lists_every_service_honestly(gclient, make_user):
     assert items["swiggy"]["auth"] == "deep_link" and items["swiggy"]["open_url"]
     assert items["notion"]["live"] is False and items["notion"]["available"] is False
     assert items["browser"]["auth"] == "builtin"
+    assert "cab" in items["ola"]["keywords"] and "food" in items["swiggy"]["keywords"]
     assert all(not f.get("value") for c in items.values() for f in c["fields"])  # no secrets
 
 
@@ -286,6 +287,8 @@ def test_connect_with_key_checks_it_and_wakes_waiting_tasks(gclient, make_user, 
         "update tasks set status = 'blocked', waiting_for_connection = '{telegram}' where id = %s",
         (task,),
     )
+    # The app sees what the task is waiting for.
+    assert gclient.get(f"/tasks/{task}", headers=h).json()["waiting_for_connection"] == ["telegram"]
 
     r = gclient.post(
         "/connections/telegram/key", json={"fields": {"bot_token": "bad-token"}}, headers=h

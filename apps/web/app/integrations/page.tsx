@@ -1,56 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ConnectedAccounts } from "@/components/ConnectedAccounts";
-import { api, type Integration } from "@/lib/api";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-const ACCESS_LABEL: Record<Integration["access"], [string, string]> = {
-  internal: ["Built in", "ok"],
-  official_api: ["Official API", "ok"],
-  partner_required: ["Partnership needed", "warn"],
-  deep_link: ["You confirm in app", "info"],
-  browser: ["Sandboxed browser", "info"],
-};
-
-export default function IntegrationsPage() {
-  const [items, setItems] = useState<Integration[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
+/** Old address: Integrations is now Connections (keeps ?connected=… from older sign-in links). */
+export default function IntegrationsRedirect() {
+  const router = useRouter();
   useEffect(() => {
-    api<Integration[]>("/integrations")
-      .then(setItems)
-      .catch((e) => setError(e.message));
-  }, []);
-
-  return (
-    <>
-      <h1>Integrations</h1>
-      <p className="muted">
-        What your agents can actually act through. Where no official API exists, agents prepare the
-        action and you confirm it in the provider&apos;s app. They never pretend to complete it.
-      </p>
-      {error && <p className="error-text">{error}</p>}
-      <ConnectedAccounts />
-      <h2>All integrations</h2>
-      <div className="grid">
-        {items?.map((i) => {
-          const [label, tone] = ACCESS_LABEL[i.access] ?? [i.access, "muted"];
-          return (
-            <div key={i.key} className="agent">
-              <div className="row">
-                <strong>{i.name}</strong>
-                <span className={`badge ${tone}`}>{label}</span>
-              </div>
-              <p className="muted small">{i.notes}</p>
-              <div className="tools">
-                {i.tools.map((t) => (
-                  <code key={t}>{t}</code>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
+    router.replace(`/connections${window.location.search}`);
+  }, [router]);
+  return <p className="muted">Opening Connections…</p>;
 }

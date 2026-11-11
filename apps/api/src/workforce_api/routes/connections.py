@@ -74,6 +74,7 @@ class ConnectorOut(BaseModel):
     note: str
     how_to_get: str
     open_url: str
+    keywords: str
     fields: list[FieldOut]
     accounts: list[AccountOut]
 
@@ -241,6 +242,7 @@ async def catalog(user: UserDep, conn: ConnDep, settings: SettingsDep) -> list[C
             note=c.note,
             how_to_get=c.how_to_get,
             open_url=c.open_url,
+            keywords=c.keywords,
             fields=[FieldOut(**f.__dict__) for f in c.fields],
             accounts=accounts.get(c.key, []),
         )

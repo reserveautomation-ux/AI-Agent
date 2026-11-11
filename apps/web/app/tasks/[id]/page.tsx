@@ -8,7 +8,9 @@ import { ApprovalCard } from "@/components/ApprovalCard";
 import {
   api,
   downloadArtifact,
+  joinNames,
   post,
+  serviceName,
   type ApprovalItem,
   type Artifact,
   type TaskDetail,
@@ -125,7 +127,8 @@ export default function TaskPage() {
   if (!task) return <p className="muted">Loading…</p>;
 
   const pending = approvals.filter((a) => a.status === "pending");
-  const asking = task.status === "blocked" && task.steps.length === 0;
+  const waitingFor = task.status === "blocked" ? (task.waiting_for_connection ?? []) : [];
+  const asking = task.status === "blocked" && task.steps.length === 0 && waitingFor.length === 0;
 
   return (
     <>
@@ -145,13 +148,27 @@ export default function TaskPage() {
             continues in the background.
           </p>
         )}
-        {task.result_summary && (
+        {task.result_summary && waitingFor.length === 0 && (
           <div className={`result ${task.status}`}>
             <p className="pre">{task.result_summary}</p>
           </div>
         )}
 
-        {(task.status === "blocked" || task.status === "failed") && (
+        {waitingFor.length > 0 && (
+          <div className="wait-card">
+            <strong>Waiting for you to connect {joinNames(waitingFor.map(serviceName))}</strong>
+            <span className="muted small">
+              Once it&apos;s connected, this task carries on by itself. Nothing else is needed.
+            </span>
+            <div>
+              <Link className="button" href={`/connections?need=${waitingFor.join(",")}`}>
+                Connect {joinNames(waitingFor.map(serviceName))}
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {((task.status === "blocked" && waitingFor.length === 0) || task.status === "failed") && (
           <form className="command" onSubmit={retry}>
             <label htmlFor="answer">{asking ? "Answer the Chief's question" : "Add guidance (optional) and retry"}</label>
             <textarea

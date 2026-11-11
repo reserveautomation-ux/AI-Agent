@@ -15,7 +15,7 @@ export default function LoginPage() {
     setError(null);
     const { error } = await supabase().auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
+      options: { emailRedirectTo: window.location.origin, shouldCreateUser: true },
     });
     setBusy(false);
     if (error) setError(error.message);
@@ -26,9 +26,12 @@ export default function LoginPage() {
     <main className="center">
       <form className="card login" onSubmit={submit}>
         <h1>Workforce OS</h1>
-        <p className="muted">Sign in with a one-time link sent to your email.</p>
+        <p className="muted">
+          New here or coming back? Enter your email and we&apos;ll send a one-time link. A new
+          account is created automatically. No password needed.
+        </p>
         {sent ? (
-          <p>Check {email} for your sign-in link.</p>
+          <p>Check {email} for your link. Open it on this device to continue.</p>
         ) : (
           <>
             <input
@@ -40,7 +43,7 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <button type="submit" disabled={busy}>
-              {busy ? "Sending…" : "Send sign-in link"}
+              {busy ? "Sending…" : "Continue with email"}
             </button>
           </>
         )}

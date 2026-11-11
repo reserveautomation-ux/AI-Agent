@@ -105,6 +105,8 @@ export interface Task {
   updated_at: string;
   completed_at: string | null;
   cost_usd: string;
+  /** Services to connect before the task can continue (it then resumes by itself). */
+  waiting_for_connection?: string[];
 }
 
 export interface TaskEvent {
@@ -253,5 +255,35 @@ export interface ProviderConnections {
   name: string;
   description: string;
   configured: boolean;
+  accounts: ConnectedAccount[];
+}
+
+export interface ConnectorField {
+  key: string;
+  label: string;
+  secret: boolean;
+  help: string;
+  placeholder: string;
+}
+
+/** One service in the Connections catalog. */
+export interface Connector {
+  key: string;
+  name: string;
+  category: string;
+  icon: string;
+  description: string;
+  /** oauth2: sign in · api_key: paste a key · deep_link: opens their app · builtin: nothing to do */
+  auth: 'oauth2' | 'api_key' | 'deep_link' | 'builtin';
+  live: boolean;
+  /** Can be connected on this server right now. */
+  available: boolean;
+  plan: string;
+  note: string;
+  how_to_get: string;
+  open_url: string;
+  /** Everyday words for search ("cab", "food"). */
+  keywords: string;
+  fields: ConnectorField[];
   accounts: ConnectedAccount[];
 }

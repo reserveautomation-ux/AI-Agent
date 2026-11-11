@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApprovalCard } from "@/components/ApprovalCard";
-import { ACTION_SERVICE, api, type ApprovalItem, type ProviderConnections } from "@/lib/api";
+import { ACTION_SERVICE, api, joinNames, type ApprovalItem, type ProviderConnections } from "@/lib/api";
 
 export default function ApprovalsPage() {
   const [pending, setPending] = useState<ApprovalItem[] | null>(null);
   const [decided, setDecided] = useState<ApprovalItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [missing, setMissing] = useState<string[]>([]);
+  const [missing, setMissing] = useState<{ provider: string; name: string }[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -25,9 +25,8 @@ export default function ApprovalsPage() {
       );
       const needed = p
         .map((a) => ACTION_SERVICE[a.action])
-        .filter((svc) => svc && notReady.has(svc.provider))
-        .map((svc) => svc.name);
-      setMissing([...new Set(needed)]);
+        .filter((svc) => svc && notReady.has(svc.provider));
+      setMissing([...new Map(needed.map((svc) => [svc.provider, svc])).values()]);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -54,8 +53,9 @@ export default function ApprovalsPage() {
       {error && <p className="error-text">{error}</p>}
       {missing.length > 0 && (
         <div className="card notice">
-          <strong>Connect {missing.join(" and ")} first.</strong> Without it, approved actions are
-          recorded but not carried out. <Link href="/integrations">Connect →</Link>
+          <strong>Connect {joinNames(missing.map((m) => m.name))} to carry these out.</strong> You
+          can still approve now: the action waits and happens as soon as it&apos;s connected.{" "}
+          <Link href={`/connections?need=${missing.map((m) => m.provider).join(",")}`}>Connect →</Link>
         </div>
       )}
 

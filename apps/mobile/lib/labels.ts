@@ -105,6 +105,51 @@ export function decidedBadge(status: string, execution: string | null): [string,
 export const ACTION_SERVICE: Record<string, { provider: string; name: string }> = {
   send_email: { provider: 'gmail', name: 'Gmail' },
   calendar_create_event: { provider: 'google_calendar', name: 'Google Calendar' },
+  send_whatsapp: { provider: 'whatsapp', name: 'WhatsApp' },
+  send_telegram: { provider: 'telegram', name: 'Telegram' },
+  post_slack: { provider: 'slack', name: 'Slack' },
+  github_save_files: { provider: 'github', name: 'GitHub' },
+  deploy_web: { provider: 'vercel', name: 'Vercel' },
+};
+
+const SERVICE_NAMES: Record<string, string> = Object.fromEntries(
+  Object.values(ACTION_SERVICE).map((s) => [s.provider, s.name]),
+);
+
+/** Display name for a service key (gmail → Gmail, google_calendar → Google Calendar). */
+export function serviceName(key: string): string {
+  return SERVICE_NAMES[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+/** Human list: "Gmail", "Gmail and Slack", "Gmail, Slack and GitHub". */
+export function joinNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+export type ConnectorState = 'connected' | 'expired' | 'ready' | 'unavailable' | 'soon' | 'app' | 'builtin';
+
+export function connectorState(c: {
+  auth: string;
+  live: boolean;
+  available: boolean;
+  accounts: { status: string }[];
+}): ConnectorState {
+  if (c.auth === 'builtin') return 'builtin';
+  if (c.auth === 'deep_link') return 'app';
+  if (!c.live) return 'soon';
+  if (c.accounts.some((a) => a.status === 'active')) return 'connected';
+  if (c.accounts.length) return 'expired';
+  return c.available ? 'ready' : 'unavailable';
+}
+
+export const STATE_BADGE: Record<ConnectorState, [string, 'ok' | 'warn' | 'info' | 'muted']> = {
+  connected: ['Connected', 'ok'],
+  expired: ['Reconnect', 'warn'],
+  ready: ['Not connected', 'muted'],
+  unavailable: ['Not set up on server', 'muted'],
+  soon: ['Coming soon', 'muted'],
+  app: ['Opens their app', 'info'],
+  builtin: ['Built in', 'ok'],
 };
 
 export const TIMEZONES: { zone: string; label: string }[] = [

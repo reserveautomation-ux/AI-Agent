@@ -1,10 +1,11 @@
-import { Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
 import { Badge, Button, Card, ErrorText, H, Input, T, styles } from '@/components/ui';
 import { ApprovalCard } from '@/components/ApprovalCard';
 import { api, post, shareArtifact, type ApprovalItem, type TaskDetail } from '@/lib/api';
+import { joinNames, serviceName } from '@/lib/labels';
 import { useTheme } from '@/lib/theme';
 
 const TERMINAL = new Set(['completed', 'cancelled', 'expired']);
@@ -98,7 +99,8 @@ export default function TaskScreen() {
   }
 
   const pending = approvals.filter((a) => a.status === 'pending');
-  const asking = task.status === 'blocked' && task.steps.length === 0;
+  const waitingFor = task.status === 'blocked' ? (task.waiting_for_connection ?? []) : [];
+  const asking = task.status === 'blocked' && task.steps.length === 0 && waitingFor.length === 0;
 
   return (
     <ScrollView
@@ -134,7 +136,7 @@ export default function TaskScreen() {
           </View>
         )}
 
-        {task.result_summary && (
+        {task.result_summary && waitingFor.length === 0 && (
           <View
             style={{
               marginTop: 12,
@@ -148,7 +150,18 @@ export default function TaskScreen() {
           </View>
         )}
 
-        {(task.status === 'blocked' || task.status === 'failed') && (
+        {waitingFor.length > 0 && (
+          <View style={{ marginTop: 14, gap: 8, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: c.warn }}>
+            <T bold>Waiting for you to connect {joinNames(waitingFor.map(serviceName))}</T>
+            <T small muted>Once it&apos;s connected, this task carries on by itself.</T>
+            <Button
+              title={`Connect ${joinNames(waitingFor.map(serviceName))}`}
+              onPress={() => router.push({ pathname: '/connections', params: { need: waitingFor.join(',') } })}
+            />
+          </View>
+        )}
+
+        {((task.status === 'blocked' && waitingFor.length === 0) || task.status === 'failed') && (
           <View style={{ marginTop: 14, gap: 10 }}>
             <T bold>{asking ? "Answer the Chief's question" : 'Add guidance (optional) and retry'}</T>
             <Input

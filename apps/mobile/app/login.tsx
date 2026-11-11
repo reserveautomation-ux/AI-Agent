@@ -20,7 +20,7 @@ export default function Login() {
     setError(null);
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { shouldCreateUser: false },
+      options: { shouldCreateUser: true },
     });
     setBusy(false);
     if (error) setError(error.message);
@@ -63,8 +63,8 @@ export default function Login() {
         <Card>
           {!sent ? (
             <>
-              <T bold>Sign in</T>
-              <T muted small style={{ marginBottom: 12 }}>We&apos;ll email you a 6-digit code.</T>
+              <T bold>Sign up or sign in</T>
+              <T muted small style={{ marginBottom: 12 }}>We&apos;ll email you a 6-digit code. New here? Your account is created automatically.</T>
               <Input
                 value={email}
                 onChangeText={setEmail}
@@ -93,7 +93,7 @@ export default function Login() {
                 style={{ fontSize: 22, letterSpacing: 6, textAlign: 'center' }}
               />
               <View style={{ height: 12 }} />
-              <Button title="Sign in" onPress={verify} loading={busy} disabled={code.length < 6} />
+              <Button title="Continue" onPress={verify} loading={busy} disabled={code.length < 6} />
               <View style={{ height: 8 }} />
               <Button title="Use a different email" variant="ghost" onPress={() => setSent(false)} />
             </>

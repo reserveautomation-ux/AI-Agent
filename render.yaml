@@ -28,6 +28,13 @@ services:
         sync: false
       - key: TOKEN_ENCRYPTION_KEY # same value on the worker
         sync: false
+      # Sign-in for other services (Slack); see docs/DEPLOY.md step 6
+      - key: OAUTH_REDIRECT_URI # https://<your-api>/connections/oauth/callback
+        sync: false
+      - key: SLACK_CLIENT_ID
+        sync: false
+      - key: SLACK_CLIENT_SECRET
+        sync: false
 
   # Agent worker: Chief planner, specialists, QA verifier, browser, push alerts
   - type: worker
