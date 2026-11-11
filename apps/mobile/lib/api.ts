@@ -319,6 +319,7 @@ export interface ChatMessage {
     tasks?: ChatTaskRef[];
     memories?: string[];
     schedules?: ScheduleRef[];
+    attachments?: { id: string; name: string; media_type: string; preview?: string }[];
     interrupted?: boolean;
   };
   created_at: string;
@@ -340,7 +341,7 @@ export type ChatEvent =
 
 /** Send a message and receive the reply as it is written (Server-Sent Events over expo/fetch). */
 export async function streamChat(
-  body: { content: string; conversation_id?: string | null; via: 'text' | 'voice' },
+  body: { content: string; conversation_id?: string | null; via: 'text' | 'voice'; attachments?: string[] },
   onEvent: (e: ChatEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {

@@ -7,6 +7,7 @@ import {
   Animated,
   Easing,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,6 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AssistantSettings, DEFAULT_VOICE, type VoicePrefs } from '@/components/AssistantSettings';
+import { photoSource, pickPdfs, pickPhotos, takePhoto, type ChatFile } from '@/lib/attachments';
 import { ChatText } from '@/components/ChatText';
 import { Icon, type IconName } from '@/components/ui';
 import {
@@ -72,6 +74,10 @@ const I = {
   spark: { ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' },
   book: { ios: 'book.closed', android: 'menu_book', web: 'menu_book' },
   clock: { ios: 'alarm', android: 'alarm', web: 'alarm' },
+  clip: { ios: 'paperclip', android: 'attach_file', web: 'attach_file' },
+  camera: { ios: 'camera', android: 'photo_camera', web: 'photo_camera' },
+  photo: { ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' },
+  doc: { ios: 'doc.text', android: 'description', web: 'description' },
   mic: { ios: 'mic.fill', android: 'mic', web: 'mic' },
   send: { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' },
   stop: { ios: 'stop.fill', android: 'stop', web: 'stop' },
@@ -195,9 +201,14 @@ export default function ChatScreen() {
   }, [activeId, busy, streaming, readAloud, speak]);
 
   const send = useCallback(
-    async (text: string, via: 'text' | 'voice' = 'text', onDelta?: (t: string) => void): Promise<string> => {
+    async (
+      text: string,
+      via: 'text' | 'voice' = 'text',
+      onDelta?: (t: string) => void,
+      atts: ChatFile[] = [],
+    ): Promise<string> => {
       const content = text.trim();
-      if (!content || streaming) return '';
+      if ((!content && !atts.length) || streaming) return '';
       setError(null);
       setInput('');
       stopSpeaking();
@@ -205,7 +216,7 @@ export default function ChatScreen() {
       const replyId = `pending-${Date.now()}`;
       setMessages((m) => [
         ...m,
-        { id: `u-${Date.now()}`, role: 'user', content, via, meta: {}, created_at: now },
+        { id: `u-${Date.now()}`, role: 'user', content, via, meta: atts.length ? { attachments: atts } : {}, created_at: now },
         { id: replyId, role: 'assistant', content: '', via, meta: { kind: 'reply' }, created_at: now },
       ]);
       setStreaming(true);
@@ -216,7 +227,7 @@ export default function ChatScreen() {
         setMessages((ms) => ms.map((m) => (m.id === replyId ? fn(m) : m)));
       try {
         await streamChat(
-          { content, conversation_id: activeRef.current, via },
+          { content, conversation_id: activeRef.current, via, attachments: atts.map((a) => a.id) },
           (e) => {
             if (e.type === 'conversation') {
               if (!activeRef.current) {
@@ -262,7 +273,12 @@ export default function ChatScreen() {
   );
 
   /** Send, and (in voice mode or with read-aloud on) speak the reply while it streams in. */
-  const sendSpoken = async (text: string, via: 'text' | 'voice', onSpoken?: () => void): Promise<string> => {
+  const sendSpoken = async (
+    text: string,
+    via: 'text' | 'voice',
+    onSpoken?: () => void,
+    atts: ChatFile[] = [],
+  ): Promise<string> => {
     const talk = via === 'voice' || readAloud;
     const id = via === 'voice' ? 'voice' : 'last';
     let begun = false;
@@ -279,6 +295,7 @@ export default function ChatScreen() {
             speaker.push(t);
           }
         : undefined,
+      atts,
     );
     if (!talk) return reply;
     if (!reply) {
@@ -293,9 +310,34 @@ export default function ChatScreen() {
     return reply;
   };
 
+  // Photos & PDFs waiting to be sent with the next message.
+  const [files, setFiles] = useState<ChatFile[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const attach = async (pick: (limit: number) => Promise<Promise<ChatFile>[]>) => {
+    setAttachOpen(false);
+    try {
+      const jobs = await pick(Math.max(1, 5 - files.length));
+      setUploading((n) => n + jobs.length);
+      await Promise.all(
+        jobs.map((job) =>
+          job
+            .then((f) => setFiles((fs) => [...fs, f].slice(0, 5)))
+            .catch((e) => setError((e as Error).message))
+            .finally(() => setUploading((n) => n - 1)),
+        ),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const sendTyped = async () => {
     if (mic.listening) mic.stop();
-    await sendSpoken(input, 'text');
+    if (uploading) return;
+    const atts = files;
+    setFiles([]);
+    await sendSpoken(input, 'text', undefined, atts);
   };
 
   // One recognizer for both dictation and voice conversation.
@@ -435,13 +477,35 @@ export default function ChatScreen() {
           </Text>
         )}
         <View style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
+          {(files.length > 0 || uploading > 0) && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 8, alignItems: 'center' }}>
+              {files.map((f) => (
+                <View key={f.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: p.line, backgroundColor: p.card, borderRadius: 14, padding: 4, paddingRight: 2 }}>
+                  {f.preview ? (
+                    <Image source={{ uri: f.preview }} style={{ width: 40, height: 40, borderRadius: 10 }} />
+                  ) : (
+                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: p.terraSoft, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontFamily: FONTS.mono, fontSize: 11, color: p.terra }}>PDF</Text>
+                    </View>
+                  )}
+                  <Text numberOfLines={1} style={{ maxWidth: 120, fontFamily: FONTS.sans, color: p.ink }}>
+                    {f.name}
+                  </Text>
+                  <Pressable onPress={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))} accessibilityRole="button" accessibilityLabel={`Remove ${f.name}`} hitSlop={8} style={{ padding: 6 }}>
+                    <Text style={{ color: p.muted, fontSize: 16 }}>×</Text>
+                  </Pressable>
+                </View>
+              ))}
+              {uploading > 0 && <Mono>Uploading…</Mono>}
+            </ScrollView>
+          )}
           <View
             style={{
               flexDirection: 'row',
               alignItems: 'flex-end',
               gap: 6,
               padding: 8,
-              paddingLeft: 20,
+              paddingLeft: 8,
               borderRadius: 30,
               borderWidth: 1,
               borderColor: mic.listening && mode === 'dictate' ? p.terra : p.line,
@@ -452,6 +516,15 @@ export default function ChatScreen() {
               shadowOffset: { width: 0, height: 8 },
               elevation: 2,
             }}>
+            <Pressable
+              onPress={() => setAttachOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Attach a photo or PDF"
+              disabled={files.length >= 5}
+              hitSlop={6}
+              style={{ height: 48, width: 36, alignItems: 'center', justifyContent: 'center', opacity: files.length >= 5 ? 0.4 : 1 }}>
+              <Icon name={I.clip} color={p.ink} size={22} />
+            </Pressable>
             <TextInput
               value={input}
               onChangeText={setInput}
@@ -473,7 +546,7 @@ export default function ChatScreen() {
             )}
             {streaming ? (
               <SendButton icon={I.stop} label="Stop" onPress={() => abortRef.current?.abort()} active />
-            ) : input.trim() ? (
+            ) : input.trim() || files.length ? (
               <SendButton icon={I.send} label="Send" onPress={sendTyped} active />
             ) : mic.available ? (
               <SendButton icon={I.wave} label="Talk to your assistant" onPress={startVoice} />
@@ -483,6 +556,31 @@ export default function ChatScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal visible={attachOpen} transparent animationType="slide" onRequestClose={() => setAttachOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} onPress={() => setAttachOpen(false)} accessibilityLabel="Close" />
+        <View style={{ backgroundColor: p.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, paddingBottom: insets.bottom + 18, gap: 4 }}>
+          <Mono>Send to {assistantName}</Mono>
+          {(
+            [
+              ['Take a photo', I.camera, takePhoto],
+              ['Choose photos', I.photo, pickPhotos],
+              ['PDF document', I.doc, pickPdfs],
+            ] as const
+          )
+            .filter(([label]) => Platform.OS !== 'web' || label !== 'Take a photo')
+            .map(([label, icon, pick]) => (
+              <Pressable
+                key={label}
+                onPress={() => attach(pick)}
+                accessibilityRole="button"
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 }}>
+                <Icon name={icon} color={p.teal} size={22} />
+                <Text style={{ fontFamily: FONTS.sans, fontSize: 17, color: p.ink }}>{label}</Text>
+              </Pressable>
+            ))}
+        </View>
+      </Modal>
 
       <ChatList
         open={listOpen}
@@ -554,6 +652,32 @@ export default function ChatScreen() {
 }
 
 // --- pieces of the paper look ------------------------------------------------------------
+
+/** An attached photo (loaded with the sign-in token) or a PDF chip. */
+function Attached({ file }: { file: { id: string; name: string; media_type: string; preview?: string } }) {
+  const p = usePaper();
+  const [src, setSrc] = useState<{ uri: string; headers?: Record<string, string> } | null>(
+    file.preview ? { uri: file.preview } : null,
+  );
+  useEffect(() => {
+    if (file.preview || file.media_type === 'application/pdf') return;
+    let gone = false;
+    photoSource(file.id)
+      .then((s) => !gone && setSrc(s))
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [file.id, file.preview, file.media_type]);
+  if (file.media_type === 'application/pdf' || !src) {
+    return (
+      <View style={{ borderWidth: 1, borderColor: p.line, backgroundColor: p.card, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12 }}>
+        <Text style={{ fontFamily: FONTS.sans, color: p.ink }}>{file.media_type === 'application/pdf' ? '📄 ' : '🖼 '}{file.name}</Text>
+      </View>
+    );
+  }
+  return <Image source={src} accessibilityLabel={file.name} style={{ width: 200, height: 200, borderRadius: 18, borderWidth: 1, borderColor: p.line }} />;
+}
 
 function Mono({ children, color, numberOfLines }: { children: ReactNode; color?: string; numberOfLines?: number }) {
   const p = usePaper();
@@ -629,9 +753,16 @@ function Message({ m, tasks, typing, speaking, onSpeak, name }: { m: ChatMessage
   if (m.role === 'user') {
     return (
       <View style={{ alignItems: 'flex-end', gap: 8 }}>
-        <View style={{ maxWidth: '86%', backgroundColor: p.teal, borderRadius: 24, borderBottomRightRadius: 6, paddingVertical: 14, paddingHorizontal: 18 }}>
+        {(m.meta.attachments ?? []).length > 0 && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end', maxWidth: '86%' }}>
+            {m.meta.attachments!.map((a) => (
+              <Attached key={a.id} file={a} />
+            ))}
+          </View>
+        )}
+        {!!m.content && <View style={{ maxWidth: '86%', backgroundColor: p.teal, borderRadius: 24, borderBottomRightRadius: 6, paddingVertical: 14, paddingHorizontal: 18 }}>
           <Text style={{ color: p.tealInk, fontFamily: FONTS.sans, fontSize: 16.5, lineHeight: 24 }}>{m.content}</Text>
-        </View>
+        </View>}
         <Mono>{m.via === 'voice' ? 'You · voice' : 'You'}</Mono>
       </View>
     );

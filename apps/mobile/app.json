@@ -63,7 +63,15 @@
           "faceIDPermission": "Workforce OS uses Face ID to confirm payments, bookings and other high-impact actions you approve."
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Workforce OS lets you send photos (bills, forms, screenshots) to your assistant.",
+          "cameraPermission": "Workforce OS lets you take a photo of a bill or document to send to your assistant.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
