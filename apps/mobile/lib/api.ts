@@ -200,7 +200,31 @@ export interface Me {
   };
   /** What this person named their assistant. */
   assistant_name: string;
+  /** How it talks. */
+  assistant_style: AssistantStyle;
+  reply_length: ReplyLength;
 }
+
+export type AssistantStyle =
+  | "friendly"
+  | "professional"
+  | "hinglish"
+  | "playful";
+export type ReplyLength = "short" | "detailed";
+export const STYLES: { key: AssistantStyle; label: string; hint: string }[] = [
+  { key: "friendly", label: "Friendly", hint: "Warm, like a helpful friend" },
+  {
+    key: "professional",
+    label: "Professional",
+    hint: "Precise and polite, no emoji",
+  },
+  {
+    key: "hinglish",
+    label: "Hinglish",
+    hint: "Hindi + English, the way you text",
+  },
+  { key: "playful", label: "Playful", hint: "Cheerful, a little witty" },
+];
 
 export interface Capability {
   key: string;

@@ -8,8 +8,9 @@ final "done" (or "error"). Conversations are private to the person.
 import asyncio
 import base64
 import json
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
@@ -18,14 +19,14 @@ from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, Field, model_validator
 from workforce_core import upi_link as upi
 from workforce_core import whatsapp_link as wa
-from workforce_core.schedules import create_schedule
+from workforce_core.schedules import ScheduleError, create_schedule
 
 from .. import chat as engine
 from ..auth import CurrentUser, UserDep
 from ..deps import ConnDep, SettingsDep
 from ..schemas import TaskCreate
 from .tasks import WorkspaceStopped, insert_task
-from .workspace import assistant_name
+from .workspace import assistant_profile
 
 router = APIRouter(tags=["chat"])
 
@@ -339,6 +340,7 @@ async def assistant_events(
     text, saved = "", False
     async with pool.connection() as c:
         try:
+            profile = await assistant_profile(c, user)
             system = await engine.system_prompt(
                 c,
                 workspace_id=user.workspace_id,
@@ -346,7 +348,9 @@ async def assistant_events(
                 who=user.email or "the user",
                 query=query,
                 voice=via == "voice",
-                name=await assistant_name(c, user),
+                name=profile["assistant_name"],
+                style=profile["assistant_style"],
+                length=profile["reply_length"],
             )
             params = {
                 "model": settings.chat_model,
@@ -581,3 +585,79 @@ async def get_file(file_id: str, user: UserDep, conn: ConnDep) -> Response:
         media_type=row["media_type"],
         headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
     )
+
+
+BRIEFING_TITLE = "Morning briefing"
+BRIEFING = """Prepare my morning briefing for today, short and in bullet points:
+1. Today's calendar: meetings and events with times (from my Google Calendar, if connected).
+2. Important unread email from the last day: who it's from and what they want, one line
+   each, flagging anything urgent (from my Gmail, if connected).
+3. Weather today where I live (use what you know about me; skip if you don't know my city).
+4. Three news headlines that matter to me, based on my work and interests.
+5. My reminders and repeating jobs due today.
+Skip any part whose service isn't connected and say once which one to connect. Don't send,
+book or pay anything."""
+
+
+class BriefingIn(BaseModel):
+    time: str = Field(default="07:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+@router.post("/schedules/briefing", response_model=ScheduleOut)
+async def morning_briefing(body: BriefingIn, user: UserDep, conn: ConnDep) -> ScheduleOut:
+    """One tap: a daily briefing (calendar, important mail, weather, news, reminders) at the
+    chosen time. Setting it again moves the time; cancel it like any other job."""
+    tz_row = await (
+        await conn.execute(
+            "select timezone from public.workspaces where id = %s", (user.workspace_id,)
+        )
+    ).fetchone()
+    tz = tz_row["timezone"] or "Asia/Kolkata"
+    now = datetime.now(UTC).astimezone(ZoneInfo(tz))
+    hh, mm = (int(x) for x in body.time.split(":"))
+    first = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    if first <= now + timedelta(minutes=1):
+        first += timedelta(days=1)
+    async with conn.transaction():
+        # Each day's briefing arrives in one "Morning briefing" chat; reuse it on a new time.
+        old = await (
+            await conn.execute(
+                "update public.schedules set active = false where user_id = %s"
+                " and workspace_id = %s and kind = 'task' and title = %s and active"
+                " returning conversation_id::text",
+                (user.user_id, user.workspace_id, BRIEFING_TITLE),
+            )
+        ).fetchall()
+        conversation_id = next((r["conversation_id"] for r in old if r["conversation_id"]), None)
+        if conversation_id is None:
+            conversation_id = (
+                await (
+                    await conn.execute(
+                        "insert into public.conversations (workspace_id, user_id, title)"
+                        " values (%s, %s, %s) returning id::text",
+                        (user.workspace_id, user.user_id, BRIEFING_TITLE),
+                    )
+                ).fetchone()
+            )["id"]
+        try:
+            made = await create_schedule(
+                conn,
+                workspace_id=user.workspace_id,
+                user_id=user.user_id,
+                kind="task",
+                what=BRIEFING,
+                at=first.strftime("%Y-%m-%dT%H:%M"),
+                repeat="daily",
+                title=BRIEFING_TITLE,
+                conversation_id=conversation_id,
+            )
+        except ScheduleError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    row = await (
+        await conn.execute(
+            "select id::text, kind, title, what, repeat, timezone, next_run_at, active, runs,"
+            " last_run_at from public.schedules where id = %s",
+            (made.id,),
+        )
+    ).fetchone()
+    return ScheduleOut(**row)

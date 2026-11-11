@@ -524,6 +524,10 @@ button.avatar { padding: 0; cursor: pointer; }
   padding: 5px 14px; font-weight: 400; font-family: var(--font-sans);
 }
 .suggest-chip:hover { border-color: var(--p-teal); }
+.suggest-chip.on { border-color: var(--p-teal); background: var(--p-teal); color: #fff; }
+.style-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.briefing-box { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; }
+.briefing-box input[type="time"] { width: auto; }
 .hint { color: var(--p-muted); font-size: 0.85rem; line-height: 1.5; margin: 0; }
 .settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
 .save-btn { background: var(--p-teal); color: var(--p-teal-ink); border-radius: 999px; padding: 10px 26px; }

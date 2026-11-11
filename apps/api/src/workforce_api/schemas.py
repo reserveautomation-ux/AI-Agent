@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 from workforce_core.task_states import TaskStatus
@@ -132,14 +132,22 @@ class MeOut(BaseModel):
     email: str | None
     workspace: WorkspaceOut
     assistant_name: str = "AI Assistant"
+    assistant_style: Literal["friendly", "professional", "hinglish", "playful"] = "friendly"
+    reply_length: Literal["short", "detailed"] = "short"
 
 
 class AssistantIn(BaseModel):
-    name: str = Field(min_length=1, max_length=40)
+    """Change any of: the name, its personality, how long its replies are."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=40)
+    style: Literal["friendly", "professional", "hinglish", "playful"] | None = None
+    length: Literal["short", "detailed"] | None = None
 
     @field_validator("name")
     @classmethod
-    def clean(cls, v: str) -> str:
+    def clean(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
         v = " ".join(v.split())
         if not v:
             raise ValueError("name must not be blank")

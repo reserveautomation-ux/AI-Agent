@@ -32,15 +32,27 @@ async def _workspace(conn, user) -> WorkspaceOut:
     return WorkspaceOut(**row, role=user.role)
 
 
-async def assistant_name(conn, user) -> str:
+DEFAULT_PROFILE = {
+    "assistant_name": "AI Assistant",
+    "assistant_style": "friendly",
+    "reply_length": "short",
+}
+
+
+async def assistant_profile(conn, user) -> dict:
+    """This person's assistant: its name, personality and reply length."""
     row = await (
         await conn.execute(
-            "select assistant_name from public.workspace_members"
+            "select assistant_name, assistant_style, reply_length from public.workspace_members"
             " where user_id = %s and workspace_id = %s",
             (user.user_id, user.workspace_id),
         )
     ).fetchone()
-    return row["assistant_name"] if row else "AI Assistant"
+    return dict(row) if row else dict(DEFAULT_PROFILE)
+
+
+async def assistant_name(conn, user) -> str:
+    return (await assistant_profile(conn, user))["assistant_name"]
 
 
 @router.get("/me", response_model=MeOut)
@@ -49,17 +61,19 @@ async def me(user: UserDep, conn: ConnDep) -> MeOut:
         user_id=user.user_id,
         email=user.email,
         workspace=await _workspace(conn, user),
-        assistant_name=await assistant_name(conn, user),
+        **await assistant_profile(conn, user),
     )
 
 
 @router.post("/me/assistant", response_model=MeOut)
 async def name_assistant(body: AssistantIn, user: UserDep, conn: ConnDep) -> MeOut:
-    """Give your assistant a name; it introduces itself by it from the next message."""
+    """Name your assistant and choose how it talks; applies from the next message."""
     await conn.execute(
-        "update public.workspace_members set assistant_name = %s"
+        "update public.workspace_members set assistant_name = coalesce(%s, assistant_name),"
+        " assistant_style = coalesce(%s, assistant_style),"
+        " reply_length = coalesce(%s, reply_length)"
         " where user_id = %s and workspace_id = %s",
-        (body.name, user.user_id, user.workspace_id),
+        (body.name, body.style, body.length, user.user_id, user.workspace_id),
     )
     return await me(user, conn)
 

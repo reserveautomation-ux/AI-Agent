@@ -938,11 +938,19 @@ export default function ChatScreen() {
         <AssistantSettings
           open
           name={assistantName}
+          style={me?.assistant_style ?? "friendly"}
+          length={me?.reply_length ?? "short"}
           lang={lang}
           prefs={voicePrefs}
           onClose={() => setCustomize(false)}
-          onSaved={(n, l, v) => {
-            if (me) setMe({ ...me, assistant_name: n });
+          onSaved={(n, st, ln, l, v) => {
+            if (me)
+              setMe({
+                ...me,
+                assistant_name: n,
+                assistant_style: st,
+                reply_length: ln,
+              });
             setLang(l);
             setVoicePrefs(v);
             void setPref("voice.lang", l);

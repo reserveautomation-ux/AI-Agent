@@ -522,3 +522,48 @@ def test_upi_payment_link(make_client, make_user):
     results = model.calls[1]["messages"][-1]["content"]
     assert "Nothing is paid until they approve with their UPI PIN" in results[0]["content"]
     assert results[1]["is_error"] and "UPI ID" in results[1]["content"]
+
+
+def test_personality_and_reply_length(make_client, make_user):
+    model = FakeChat(say("Haan bilkul!"), say("Certainly."))
+    client = make_client(model)
+    h = auth(make_user())
+    me = client.get("/me", headers=h).json()
+    assert (me["assistant_style"], me["reply_length"]) == ("friendly", "short")
+    r = client.post("/me/assistant", json={"style": "hinglish", "length": "detailed"}, headers=h)
+    assert r.status_code == 200
+    assert r.json()["assistant_name"] == "AI Assistant"  # unchanged when not sent
+    assert (r.json()["assistant_style"], r.json()["reply_length"]) == ("hinglish", "detailed")
+    send(client, h, "Kal ka plan batao")
+    system = model.calls[0]["system"]
+    assert "Hinglish" in system and "full, well-organised answers" in system
+    client.post("/me/assistant", json={"name": "Maya", "style": "professional"}, headers=h)
+    send(client, h, "Hello")
+    system = model.calls[1]["system"]
+    assert system.startswith("You are Maya") and "No emoji" in system and "Hinglish" not in system
+    assert client.post("/me/assistant", json={"style": "rude"}, headers=h).status_code == 422
+
+
+def test_morning_briefing_preset(make_client, make_user, db):
+    client = make_client(FakeChat())
+    h = auth(make_user())
+    r = client.post("/schedules/briefing", json={"time": "07:15"}, headers=h)
+    assert r.status_code == 200, r.text
+    first = r.json()
+    assert first["title"] == "Morning briefing" and first["kind"] == "task"
+    assert first["repeat"] == "daily" and "calendar" in first["what"]
+    conv = db.execute(
+        "select conversation_id from schedules where id = %s", (first["id"],)
+    ).fetchone()[0]
+    assert conv is not None
+    # Setting it again moves the time and keeps one briefing, in the same chat.
+    again = client.post("/schedules/briefing", json={"time": "08:00"}, headers=h).json()
+    active = [s for s in client.get("/schedules", headers=h).json() if s["active"]]
+    assert [s["id"] for s in active] == [again["id"]]
+    assert (
+        db.execute(
+            "select conversation_id from schedules where id = %s", (again["id"],)
+        ).fetchone()[0]
+        == conv
+    )
+    assert client.post("/schedules/briefing", json={"time": "7am"}, headers=h).status_code == 422

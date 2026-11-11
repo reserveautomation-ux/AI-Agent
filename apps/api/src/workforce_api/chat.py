@@ -28,6 +28,21 @@ from workforce_core.memory import MemoryRejected, format_for_prompt, recall, rem
 MAX_ROUNDS = 5
 HISTORY = 30
 
+STYLES = {
+    "friendly": "Personality: warm, friendly and encouraging, like a helpful friend.",
+    "professional": "Personality: professional, precise and polite, like an executive "
+    "assistant. No emoji, no slang.",
+    "hinglish": "Personality: friendly, and talk in natural Hinglish (Hindi and English mixed, "
+    "written in Roman letters, the way people text in India), unless they write in another "
+    "language.",
+    "playful": "Personality: cheerful and witty, with light humour and the odd emoji, but "
+    "never at the cost of being clear and correct.",
+}
+LENGTHS = {
+    "short": "Keep replies short and natural unless they ask for detail.",
+    "detailed": "Give full, well-organised answers with the useful detail; still no padding.",
+}
+
 SYSTEM = """You are {name}, the personal AI assistant of {who} in Workforce OS. You are \
 their one assistant: you chat with them, remember them, and run their AI workforce, a team \
 of agents that do real work in the background. {name} is the name they gave you; use it \
@@ -37,8 +52,7 @@ Now: {now} ({tz}).
 
 How to help:
 - Answer questions, explain, brainstorm, write and rewrite text yourself, right here. \
-Use web search for current facts. Keep replies short and natural unless they ask for \
-detail.
+Use web search for current facts. {length}
 - For anything that acts in the world or takes real work, call start_task: sending \
 email, WhatsApp, Telegram or Slack messages; calendar events; reading their connected \
 accounts; research that produces files or spreadsheets; building or deploying a website \
@@ -322,6 +336,8 @@ async def system_prompt(
     query: str,
     voice: bool,
     name: str = "AI Assistant",
+    style: str = "friendly",
+    length: str = "short",
 ) -> str:
     tz = (
         await (
@@ -334,6 +350,7 @@ async def system_prompt(
     memories = await recall(conn, workspace_id=workspace_id, query=query, limit=8)
     return SYSTEM.format(
         name=name,
+        length=LENGTHS.get(length, LENGTHS["short"]) + " " + STYLES.get(style, STYLES["friendly"]),
         who=who,
         now=datetime.now(ZoneInfo(tz)).strftime("%A %d %B %Y, %H:%M"),
         tz=tz,
