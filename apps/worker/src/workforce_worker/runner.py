@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import signal
 import socket
 import uuid
 
@@ -68,6 +69,13 @@ class WorkerSettings(BaseSettings):
     browser_enabled: bool = True
 
 
+async def connect(database_url: str) -> AsyncConnection:
+    """Autocommit connection that also works through Supabase's transaction pooler."""
+    return await AsyncConnection.connect(
+        database_url, autocommit=True, row_factory=dict_row, prepare_threshold=None
+    )
+
+
 async def claim(conn: AsyncConnection, worker_id: str) -> tuple[str, int] | None:
     row = await (
         await conn.execute(CLAIM_SQL, {"worker": worker_id, "lease": LEASE_SECONDS})
@@ -88,7 +96,7 @@ async def release(
 
 
 async def _heartbeat(database_url: str, task_id: str, worker_id: str) -> None:
-    async with await AsyncConnection.connect(database_url, autocommit=True) as hb:
+    async with await connect(database_url) as hb:
         while True:
             await asyncio.sleep(HEARTBEAT_SECONDS)
             await hb.execute(
@@ -126,15 +134,25 @@ async def process_one(
     pusher: Pusher | None = None,
 ) -> str | None:
     heartbeat = asyncio.create_task(_heartbeat(database_url, task_id, worker_id))
+    shutting_down = False
     try:
         return await _process(conn, llm, task_id, attempts, browser)
+    except asyncio.CancelledError:
+        # The worker is stopping (deploy/restart). Hand the task back now so another
+        # worker resumes it from its last checkpoint instead of waiting for the lease.
+        shutting_down = True
+        with contextlib.suppress(Exception):
+            async with await connect(database_url) as fresh:
+                await release(fresh, task_id, error="worker restarted; resuming")
+        raise
     finally:
         heartbeat.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await heartbeat
         # Completed, blocked, failed or waiting for approval: tell the owner.
-        with contextlib.suppress(Exception):
-            await notify_task(conn, task_id, pusher)
+        if not shutting_down:
+            with contextlib.suppress(Exception):
+                await notify_task(conn, task_id, pusher)
 
 
 async def _process(
@@ -188,9 +206,7 @@ async def worker_loop(
     pusher: Pusher | None = None,
 ) -> None:
     worker_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
-    async with await AsyncConnection.connect(
-        settings.database_url, autocommit=True, row_factory=dict_row, prepare_threshold=None
-    ) as conn:
+    async with await connect(settings.database_url) as conn:
         while not stop.is_set():
             claimed = await claim(conn, worker_id)
             if not claimed:
@@ -215,7 +231,7 @@ async def worker_loop(
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     settings = WorkerSettings()  # type: ignore[call-arg]
-    async with await AsyncConnection.connect(settings.database_url, autocommit=True) as conn:
+    async with await connect(settings.database_url) as conn:
         await sync_tool_definitions(conn)
     llm = AnthropicLLM()
     stop = asyncio.Event()
@@ -223,13 +239,25 @@ async def main() -> None:
     if settings.browser_enabled:
         browser = BrowserService(DomainPolicy())
         await browser.start()
+    workers = [
+        asyncio.create_task(worker_loop(settings, llm, browser, stop, ExpoPusher()))
+        for _ in range(settings.worker_concurrency)
+    ]
+
+    def shutdown() -> None:
+        if stop.is_set():
+            return
+        log.info("shutting down: handing in-progress tasks back")
+        stop.set()
+        for w in workers:
+            w.cancel()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        with contextlib.suppress(NotImplementedError):  # not available on Windows
+            loop.add_signal_handler(sig, shutdown)
     try:
-        await asyncio.gather(
-            *(
-                worker_loop(settings, llm, browser, stop, ExpoPusher())
-                for _ in range(settings.worker_concurrency)
-            )
-        )
+        await asyncio.gather(*workers, return_exceptions=True)
     finally:
         if browser:
             await browser.close()

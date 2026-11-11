@@ -3,7 +3,9 @@
 Your AI workforce: one instruction → a Chief AI Executive delegates to specialist
 agents → verified result, with your approval wherever money or commitments are involved.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, safety model and roadmap.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, safety model and roadmap,
+and **[docs/DEPLOY.md](docs/DEPLOY.md) to put it online** (Supabase + Render blueprint +
+phone app), so the mobile app works from anywhere.
 
 **Status: phase 2 (agents at work).** Give an instruction by typing or voice.
 The Chief AI Executive plans it, specialist agents do the steps with real tools

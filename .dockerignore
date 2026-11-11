@@ -1,0 +1,15 @@
+.git
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.env
+**/.env.*
+!**/.env.example
+apps/web
+apps/mobile
+docs
+supabase
+scripts
+**/tests

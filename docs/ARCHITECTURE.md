@@ -150,6 +150,7 @@ Re-check each provider's current terms before enabling it.
 | 4. Reliability | Failure/restart tests, evaluations feeding the lifecycle, cost tracking, staging deploy |
 | 5. Email & calendar | Google OAuth connections |
 | **6. Mobile app** ✅ | Expo app (Android + iOS): native voice, push notifications, share files |
+| **6b. Deployment** ✅ | Dockerfiles, Render blueprint, graceful worker restarts, smoke check ([DEPLOY.md](DEPLOY.md)) |
 | 7. Software factory | Isolated build runners, web deploy, Play/App Store submission |
 | 8. Travel & commerce | Flights via API; rides/food/movies via confirm-in-app links |
 | 9. Finance | Market research and alerts, then broker orders after compliance review |

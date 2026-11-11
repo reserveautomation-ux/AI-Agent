@@ -1,6 +1,7 @@
 """End-to-end tests of the task pipeline with a scripted stand-in for Claude."""
 
 import asyncio
+import contextlib
 import json
 from types import SimpleNamespace
 
@@ -113,6 +114,8 @@ class FakeLLM:
         n = sum(1 for r, _ in self.calls if r == role)
         self.calls.append((role, p))
         result = self.handlers[role](p, n)
+        if asyncio.iscoroutine(result):
+            result = await result
         if isinstance(result, Exception):
             raise result
         return result
@@ -460,3 +463,33 @@ def test_owner_answer_replans_blocked_task(database_url, db, workspace):
         "select convert_from(content, 'UTF8') from artifacts where task_id = %s", (task,)
     ).fetchone()[0]
     assert "m.uber.com" in card and "Nothing has been booked or paid yet" in card
+
+
+def test_worker_shutdown_hands_task_back(database_url, db, workspace):
+    task = new_task(db, workspace)
+
+    async def slow_plan(p, n):
+        await asyncio.sleep(3600)  # a long model call in progress when the worker stops
+
+    llm = FakeLLM(lambda p, n: slow_plan(p, n), research_step, lambda p, n: text_resp(verdict()))
+
+    async def go(conn):
+        await conn.execute(
+            "update tasks set run_after = now() + interval '1 day' where id <> %s", (task,)
+        )
+        claimed = await claim(conn, "stopping-worker")
+        job = asyncio.create_task(
+            process_one(
+                conn, llm, task, claimed[1], worker_id="stopping-worker", database_url=database_url
+            )
+        )
+        await asyncio.sleep(0.3)
+        job.cancel()  # what SIGTERM does
+        with contextlib.suppress(asyncio.CancelledError):
+            await job
+
+    run(database_url, go)
+    owner, error = db.execute(
+        "select lease_owner, last_error from tasks where id = %s", (task,)
+    ).fetchone()
+    assert owner is None and "restarted" in error
