@@ -271,8 +271,17 @@ async def _inbox_pass(conn: AsyncConnection, integrations: Integrations, pusher)
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     settings = WorkerSettings()  # type: ignore[call-arg]
-    async with await connect(settings.database_url) as conn:
-        await sync_tool_definitions(conn)
+    # On a first deploy the API may still be setting up the database: wait for it.
+    for _ in range(60):
+        try:
+            async with await connect(settings.database_url) as conn:
+                await sync_tool_definitions(conn)
+            break
+        except (pg_errors.UndefinedTable, pg_errors.UndefinedObject, OSError) as exc:
+            log.info("waiting for the database to be set up (%s)", exc)
+            await asyncio.sleep(10)
+    else:
+        raise RuntimeError("the database was never set up; check the API's logs")
     llm = AnthropicLLM()
     stop = asyncio.Event()
     browser = None

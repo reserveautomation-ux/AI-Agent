@@ -25,59 +25,70 @@ Anthropic before you start; you can set a per-task budget in the app.
 
 ---
 
+## 0. Accounts you need (all have free sign-up)
+
+- **GitHub** (this repository), **Supabase** (supabase.com), **Render** (render.com),
+  **Anthropic** (console.anthropic.com: add a few dollars of credit and create an API key).
+- No terminal or coding needed for the steps below.
+
 ## 1. Supabase (database and sign-in)
 
-1. Create a project at supabase.com (region: Mumbai).
-2. Apply the database migrations from your computer:
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref <your-project-ref>
-   npx supabase db push
-   ```
-3. **Authentication → Sign In / Providers → Email**: keep Email enabled and leave
-   **"Allow new users to sign up" on**, so anyone can create an account with just their
-   email (each person gets their own private workspace, owner role and safety policy,
-   created automatically). Turn it **off** if you want invite-only.
-4. Sign in once with your own email (or **Authentication → Users → Invite user**).
-5. **Authentication → Rate Limits / SMTP**: Supabase's built-in email sender only sends
-   a few emails an hour. Before opening sign-up to the public, set up your own SMTP
-   (e.g. Resend, Amazon SES, Brevo) under **Authentication → Emails → SMTP Settings**.
-6. **Authentication → Email Templates → Magic Link**: add the 6-digit code for the
+1. **New project**: any name, a strong database password (save it), region **Mumbai**.
+2. Nothing to run: the API sets the database up by itself on its first start.
+3. **Authentication → Sign In / Providers → Email**: keep Email on and **"Allow new users
+   to sign up" on** (anyone can create an account; each gets a private workspace). Turn it
+   off for invite-only.
+4. **Authentication → Email Templates → Magic Link**: add the 6-digit code for the
    phone app, e.g. `<p>Your code: <strong>{{ .Token }}</strong></p>` (keep the link
    for the web app).
-7. **Authentication → URL Configuration**: add your web app URL (step 2 below) to
-   the redirect URLs.
-8. Collect these values:
-   - **Project URL** `https://<ref>.supabase.co`
-   - **Publishable (anon) key**: safe in apps; row-level security protects data
-   - **Database connection string**: Connect → *Session pooler* (port 5432).
-     This is a secret: only the API and worker get it.
+5. Collect three values (Supabase shows each with a copy button):
+   - **Project URL** `https://<ref>.supabase.co` (Project Settings → Data API, or Connect).
+   - **Publishable key** (Project Settings → API Keys). Safe to put in apps.
+   - **Connection string**: **Connect → Session pooler** (port 5432). Replace
+     `[YOUR-PASSWORD]` with your database password. This one is secret.
+6. Later, before many people sign up: Supabase's built-in email sender only sends a few
+   emails an hour. Add your own under **Authentication → Emails → SMTP Settings**
+   (Resend, Brevo or Amazon SES have free tiers).
 
 ## 2. Render (API, worker, web app)
 
-1. Push this repository to GitHub (already done if you're reading this there).
-2. Render Dashboard → **New → Blueprint** → choose the repository. Render reads
-   `render.yaml` and asks for each secret:
+1. Render Dashboard → **New → Blueprint** → connect GitHub → choose this repository and
+   the branch to deploy. Render reads `render.yaml`.
+2. Render asks for these values. Leave the optional Google/Slack ones and the two
+   "after the first deploy" ones empty for now.
 
 | Service | Variable | Value |
 |---|---|---|
-| workforce-api | `DATABASE_URL` | Supabase session pooler string |
-| workforce-api | `SUPABASE_URL` | `https://<ref>.supabase.co` |
-| workforce-api | `CORS_ORIGINS` | `["https://workforce-web.onrender.com"]` (your web URL) |
-| workforce-api | `ANTHROPIC_API_KEY` | from console.anthropic.com (the chat assistant) |
+| workforce-api | `DATABASE_URL` | Supabase session pooler string (with your password) |
+| workforce-api | `SUPABASE_URL` | Supabase Project URL |
+| workforce-api | `ANTHROPIC_API_KEY` | your Anthropic API key |
+| workforce-api | `CORS_ORIGINS` | leave empty (it guesses the web app's address) |
 | workforce-worker | `DATABASE_URL` | same as the API |
-| workforce-worker | `ANTHROPIC_API_KEY` | from console.anthropic.com |
-| workforce-web | `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` |
-| workforce-web | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key |
-| workforce-web | `NEXT_PUBLIC_API_URL` | `https://workforce-api.onrender.com` (your API URL) |
+| workforce-worker | `ANTHROPIC_API_KEY` | same as the API |
+| workforce-web | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL |
+| workforce-web | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key |
+| workforce-web | `NEXT_PUBLIC_API_URL` | leave empty for now |
 
-3. Deploy. When all three are live, run the check:
-   ```bash
-   scripts/smoke.sh https://workforce-api.onrender.com https://workforce-web.onrender.com
-   ```
-4. Optional: add your own domain (e.g. `api.yourdomain.com`) in each service's
-   Settings, then update `CORS_ORIGINS`, `NEXT_PUBLIC_API_URL` and the Supabase
-   redirect URL to match.
+   Done for you: the encryption key for connected accounts (`TOKEN_ENCRYPTION_KEY`) is
+   generated by Render and shared by the API and worker; the database sets itself up on
+   the API's first start; the API works out its own address (`PUBLIC_API_URL`) and the
+   sign-in callback URLs.
+3. **Apply / Deploy**. The first build takes 5-10 minutes. The worker may log "waiting
+   for the database to be set up" until the API has started; that's expected.
+4. When it's live, copy the two addresses Render shows:
+   - API, e.g. `https://workforce-api.onrender.com` (open `<that>/health`: it should say ok)
+   - web app, e.g. `https://workforce-web.onrender.com`
+5. **workforce-web → Environment**: set `NEXT_PUBLIC_API_URL` to the API address, then
+   **Manual Deploy** (the web app needs a rebuild to pick it up).
+6. If the web address isn't `workforce-web.onrender.com` exactly, set **workforce-api →
+   Environment → `CORS_ORIGINS`** to it (just the address).
+7. **Supabase → Authentication → URL Configuration**: set *Site URL* to the web address
+   and add it under *Redirect URLs*.
+8. Optional check from a computer:
+   `scripts/smoke.sh https://<api> https://<web>`.
+
+If Render rejects a plan name in `render.yaml`, pick the plan in the form instead: the
+worker needs about 2 GB of memory for its browser; the API and web app run on the smallest.
 
 Every push to the branch Render watches redeploys automatically. When the worker
 redeploys it hands its current task back, and the new worker resumes it from its
@@ -136,12 +147,12 @@ One-time setup in Google Cloud (about 10 minutes):
      (e.g. `https://workforce-api.onrender.com/connections/google/callback`). One URI
      serves Gmail and Calendar.
    - Copy the **Client ID** and **Client secret**.
-6. Make an encryption key (keep it secret; it protects the stored Google tokens):
-   `python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"`
-7. In Render set, on **workforce-api**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-   `GOOGLE_REDIRECT_URI` (the URI from step 5) and `TOKEN_ENCRYPTION_KEY`; on
-   **workforce-worker**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and the **same**
-   `TOKEN_ENCRYPTION_KEY`.
+6. (Nothing to do: the encryption key that protects stored Google tokens was generated by
+   Render in step 2.)
+7. In Render set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on **both workforce-api and
+   workforce-worker**. The redirect URI is worked out automatically
+   (`<your API>/connections/google/callback`); set `GOOGLE_REDIRECT_URI` only if you use
+   your own domain.
 8. In the app: **Connections** (web menu, or Settings → Open Connections on the phone)
    → **Connect Gmail / Connect Google Calendar**. Sign in with Google and allow what each asks for. Each is a
    separate connection you can disconnect on its own.
@@ -167,8 +178,8 @@ also remove access anytime at myaccount.google.com → Security → Third-party 
 Everyone connects their **own** accounts in **Connections**, only when they need them.
 If a task needs a service that isn't connected, it pauses, tells them which one, and
 carries on by itself once they connect it. All keys and sign-ins are checked with the
-provider first, then stored encrypted with `TOKEN_ENCRYPTION_KEY` (step 5.6), so set
-that key on the API and worker even if you skip Google.
+provider first, then stored encrypted with the `TOKEN_ENCRYPTION_KEY` Render generated
+in step 2.
 
 **No server setup needed** (each person pastes their own key; the app shows where to
 find it):
@@ -181,8 +192,8 @@ find it):
 | Vercel | Account token | Publish a website a task made, at a `*.vercel.app` address |
 | Pictures (Cloudflare AI) | Account ID + Workers AI API token (free account) | Make pictures and posters (~230 a day free) |
 
-**Chat with the assistant from Telegram (free):** set `PUBLIC_API_URL` on **workforce-api**
-to its public `https://` address. People connect their own bot (Telegram row above), then
+**Chat with the assistant from Telegram (free):** works automatically on Render (the API
+knows its own address; on other hosts set `PUBLIC_API_URL`). People connect their own bot (Telegram row above), then
 tap **Link Telegram chat** in Connections and press *Start* in Telegram. Only their own
 chat can talk to their assistant; task updates, reminders and important-email alerts are
 also sent there.
@@ -194,8 +205,8 @@ also sent there.
    bot token scopes `chat:write`, `chat:write.public`, `channels:read`.
 3. **Manage Distribution → Activate Public Distribution** if people outside your own
    Slack workspace should be able to connect.
-4. On **workforce-api** set `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` (Basic Information
-   → App Credentials) and `OAUTH_REDIRECT_URI` (the URL from step 2).
+4. On **workforce-api** set `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET` (Basic Information
+   → App Credentials). The redirect URL is worked out automatically.
 
 Services without a public API (Uber, Ola, Rapido, Swiggy, Zomato, Amazon, Flipkart,
 BookMyShow, IRCTC) are listed as **Opens their app**: agents find the option and prepare
@@ -227,12 +238,12 @@ Slack needs public distribution (step 3). Everything else uses each person's own
 | Chat says the assistant isn't set up | Set `ANTHROPIC_API_KEY` on **workforce-api** too, redeploy |
 | `prepared statement … does not exist` | Use the session pooler (5432) string |
 | Phone app can't connect | `EXPO_PUBLIC_API_URL` must be the public `https://` API URL |
-| "Gmail isn't set up on the server" | Set the Google variables and `TOKEN_ENCRYPTION_KEY` on the API and worker, redeploy |
-| Google says `redirect_uri_mismatch` | `GOOGLE_REDIRECT_URI` must exactly match the URI in the Google client (`…/connections/google/callback`) |
+| "Gmail isn't set up on the server" | Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` on the API and worker, redeploy |
+| Google says `redirect_uri_mismatch` | The URI in the Google client must be exactly `<your API>/connections/google/callback` (or set `GOOGLE_REDIRECT_URI` to match) |
 | Meeting at the wrong time | Set your time zone in Settings (phone) / Connections (web) |
 | A task says "waiting for you to connect …" | Open Connections, connect that service; the task resumes by itself within a few seconds |
-| A service shows "Not set up on server" | Google/Slack: set their client ID/secret and redirect variables; key services: set `TOKEN_ENCRYPTION_KEY` on API and worker |
-| Slack says `bad_redirect_uri` | `OAUTH_REDIRECT_URI` must exactly match the Slack app's redirect URL (`…/connections/oauth/callback`) |
+| A service shows "Not set up on server" | Google/Slack: set their client ID/secret and redirect variables; key services: check the `workforce-shared` environment group has `TOKEN_ENCRYPTION_KEY` |
+| Slack says `bad_redirect_uri` | The Slack app's redirect URL must be exactly `<your API>/connections/oauth/callback` (or set `OAUTH_REDIRECT_URI` to match) |
 | New people can't sign up | Supabase → Email provider → "Allow new users to sign up" on; set up SMTP if codes don't arrive |
 | Gmail or Calendar stops working after a week | The Google app is still in *Testing*; publish it (step 5.4) and reconnect |
 | Task waiting with "Reconnect Gmail" | Access was revoked or expired: Connections → Reconnect Gmail; the task then continues |

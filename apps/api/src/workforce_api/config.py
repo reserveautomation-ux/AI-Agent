@@ -1,7 +1,9 @@
+import json
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -20,7 +22,20 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str | None = None
     jwt_audience: str = "authenticated"
 
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    # Web app addresses allowed to call the API: JSON list or comma-separated. Left empty on
+    # Render, the API guesses its sibling web app (workforce-api -> workforce-web).
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_origins(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            items = json.loads(v) if v.startswith("[") else v.split(",")
+            return [str(x).strip().rstrip("/") for x in items if str(x).strip()]
+        return v
 
     # Connected accounts (Gmail). All optional: without them, "Connect Gmail" explains
     # that the server isn't set up yet.
@@ -34,6 +49,12 @@ class Settings(BaseSettings):
     oauth_redirect_uri: str | None = None
     slack_client_id: str | None = None
     slack_client_secret: str | None = None
+    # Set up / upgrade the database automatically on start (supabase/migrations).
+    auto_migrate: bool = False
+    migrations_dir: str | None = None
+    # Render sets this for web services (https://<name>.onrender.com).
+    render_external_url: str | None = None
+
     # This API's own public address, e.g. https://workforce-api.onrender.com
     # (Telegram sends messages for the "chat from Telegram" feature here).
     public_api_url: str | None = None
@@ -51,6 +72,25 @@ class Settings(BaseSettings):
     app_redirect_schemes: list[str] = Field(
         default_factory=lambda: ["workforceos://", "exp+workforce-os://"]
     )
+
+    @model_validator(mode="after")
+    def _derive_urls(self) -> "Settings":
+        """Fewer things to type when deploying: work out our own address and callbacks."""
+        if not self.public_api_url and self.render_external_url:
+            self.public_api_url = self.render_external_url
+        if not self.cors_origins:
+            api = (self.render_external_url or "").rstrip("/")
+            self.cors_origins = (
+                [api.replace("workforce-api", "workforce-web")]
+                if "workforce-api" in api
+                else ["http://localhost:3000"]
+            )
+        base = (self.public_api_url or "").rstrip("/")
+        if base and not self.google_redirect_uri and self.google_client_id:
+            self.google_redirect_uri = f"{base}/connections/google/callback"
+        if base and not self.oauth_redirect_uri:
+            self.oauth_redirect_uri = f"{base}/connections/oauth/callback"
+        return self
 
     def oauth_client(self, prefix: str) -> tuple[str, str, str] | None:
         """(client_id, client_secret, redirect_uri) for a provider, if set up."""

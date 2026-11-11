@@ -1,9 +1,12 @@
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from workforce_core.db import make_pool, sync_tool_definitions
+from workforce_core.migrate import migrate
 
 from .chat import AnthropicChat, ChatModel
 from .config import Settings, get_settings
@@ -19,6 +22,8 @@ from .routes import (
     workspace,
 )
 
+log = logging.getLogger(__name__)
+
 
 def create_app(
     settings: Settings | None = None, google_http=None, chat_model: ChatModel | None = None
@@ -28,6 +33,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if settings.auto_migrate:
+            applied = await migrate(settings.database_url, _migrations_dir(settings))
+            if applied:
+                log.info("database set up / upgraded: %s", ", ".join(applied))
         pool = make_pool(settings.database_url)
         await pool.open(wait=True)
         async with pool.connection() as conn:
@@ -69,6 +78,16 @@ def create_app(
     app.include_router(chat.router)
     app.include_router(telegram.router)
     return app
+
+
+def _migrations_dir(settings: Settings) -> Path:
+    if settings.migrations_dir:
+        return Path(settings.migrations_dir)
+    for parent in Path(__file__).resolve().parents:  # repo checkout or /app in the image
+        candidate = parent / "supabase" / "migrations"
+        if candidate.is_dir():
+            return candidate
+    raise RuntimeError("AUTO_MIGRATE is on but supabase/migrations wasn't found")
 
 
 def app_factory() -> FastAPI:

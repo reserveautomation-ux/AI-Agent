@@ -21,6 +21,8 @@ RUN uv sync --locked --no-dev --package workforce-api --no-install-workspace
 
 COPY packages/core packages/core
 COPY apps/api apps/api
+# Database setup files, applied on start when AUTO_MIGRATE=true.
+COPY supabase/migrations supabase/migrations
 RUN uv sync --locked --no-dev --package workforce-api
 
 RUN useradd --create-home --uid 10001 app

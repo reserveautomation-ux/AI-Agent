@@ -580,3 +580,34 @@ def test_timezone_defaults_to_india_and_can_change(client, make_user):
         client.post("/workspace/timezone", json={"timezone": "Mars/Base"}, headers=h).status_code
         == 422
     )
+
+
+def test_render_address_fills_in_callbacks():
+    s = Settings(
+        database_url="postgresql://x",
+        supabase_url=SUPABASE_URL,
+        render_external_url="https://workforce-api.onrender.com",
+        google_client_id="cid",
+    )
+    assert s.public_api_url == "https://workforce-api.onrender.com"
+    assert s.google_redirect_uri == "https://workforce-api.onrender.com/connections/google/callback"
+    assert s.oauth_redirect_uri == "https://workforce-api.onrender.com/connections/oauth/callback"
+    explicit = Settings(
+        database_url="postgresql://x",
+        supabase_url=SUPABASE_URL,
+        render_external_url="https://a.onrender.com",
+        public_api_url="https://api.example.com",
+    )
+    assert explicit.public_api_url == "https://api.example.com"
+    assert explicit.google_redirect_uri is None  # no Google client configured
+
+
+def test_cors_origins_are_forgiving(monkeypatch):
+    base = {"database_url": "postgresql://x", "supabase_url": SUPABASE_URL}
+    monkeypatch.setenv("CORS_ORIGINS", "")
+    monkeypatch.setenv("RENDER_EXTERNAL_URL", "https://workforce-api.onrender.com")
+    assert Settings(**base).cors_origins == ["https://workforce-web.onrender.com"]
+    monkeypatch.setenv("CORS_ORIGINS", "https://a.example.com/, https://b.example.com")
+    assert Settings(**base).cors_origins == ["https://a.example.com", "https://b.example.com"]
+    monkeypatch.setenv("CORS_ORIGINS", '["https://c.example.com"]')
+    assert Settings(**base).cors_origins == ["https://c.example.com"]
