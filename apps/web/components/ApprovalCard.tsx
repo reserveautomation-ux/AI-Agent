@@ -102,10 +102,13 @@ export function ApprovalCard({
           : detailEntries(item.action_payload, !!item.amount).map(([k, v]) => (
               <div key={k}>
                 <dt>{fieldLabel(k)}</dt>
-                <dd className="pre">{fieldValue(v)}</dd>
+                <dd className="pre">{fieldValue(v, k)}</dd>
               </div>
             ))}
       </dl>
+      {item.action === "calendar_create_event" && typeof item.action_payload.attendees === "string" && (
+        <p className="small" style={{ margin: 0 }}>📨 Google will email invitations to these people when you approve.</p>
+      )}
       {pending ? (
         <>
           <span className="muted small">⏳ {expiresIn(item.expires_at)} · nothing happens until you approve</span>

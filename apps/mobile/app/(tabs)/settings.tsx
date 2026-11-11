@@ -1,10 +1,11 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Platform, ScrollView, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { ConnectedAccounts } from '@/components/ConnectedAccounts';
 import { Badge, Button, Card, ErrorText, H, T, styles } from '@/components/ui';
 import { API_URL, api, post, type Me } from '@/lib/api';
+import { TIMEZONES } from '@/lib/labels';
 import { registerForPush } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -15,6 +16,17 @@ export default function SettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [push, setPush] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tzOpen, setTzOpen] = useState(false);
+
+  const setTimezone = async (zone: string) => {
+    setTzOpen(false);
+    try {
+      const ws = await post<Me['workspace']>('/workspace/timezone', { timezone: zone });
+      if (me) setMe({ ...me, workspace: ws });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +87,38 @@ export default function SettingsScreen() {
           </View>
         )}
       </Card>
+
+      <H>Time zone</H>
+      <Card>
+        <View style={styles.between}>
+          <View style={{ flex: 1 }}>
+            <T bold>{TIMEZONES.find((z) => z.zone === me?.workspace.timezone)?.label ?? me?.workspace.timezone ?? '…'}</T>
+            <T small muted>Used for meeting times and for &quot;today&quot; when agents plan.</T>
+          </View>
+          {me?.workspace.role === 'owner' || me?.workspace.role === 'admin' ? (
+            <Button title="Change" small variant="ghost" onPress={() => setTzOpen(true)} />
+          ) : null}
+        </View>
+      </Card>
+      <Modal visible={tzOpen} transparent animationType="slide" onRequestClose={() => setTzOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} onPress={() => setTzOpen(false)} accessibilityLabel="Close" />
+        <View style={{ backgroundColor: c.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20, maxHeight: '60%' }}>
+          <T bold size={17} style={{ marginBottom: 8 }}>Time zone</T>
+          <ScrollView>
+            {TIMEZONES.map((z) => (
+              <Pressable
+                key={z.zone}
+                onPress={() => setTimezone(z.zone)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: z.zone === me?.workspace.timezone }}
+                style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border }}>
+                <T bold={z.zone === me?.workspace.timezone}>{z.label}</T>
+                {z.zone === me?.workspace.timezone && <T color={c.ok}>✓</T>}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
 
       <H>Connected accounts</H>
       <ConnectedAccounts />

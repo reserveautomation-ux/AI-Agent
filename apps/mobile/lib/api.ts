@@ -164,7 +164,7 @@ export interface TaskDetail extends Task {
 export interface Me {
   user_id: string;
   email: string | null;
-  workspace: { id: string; name: string; role: string; kill_switch: boolean };
+  workspace: { id: string; name: string; role: string; kill_switch: boolean; timezone: string };
 }
 
 export interface Capability {
@@ -251,6 +251,7 @@ export interface ConnectedAccount {
 export interface ProviderConnections {
   provider: string;
   name: string;
+  description: string;
   configured: boolean;
   accounts: ConnectedAccount[];
 }

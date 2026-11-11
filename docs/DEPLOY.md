@@ -102,24 +102,28 @@ builds get them.
 4. On the phone: **Settings → Turn on notifications**, then close the app and give
    another instruction from the web; you should get a push when it finishes.
 
-## 5. Connect Gmail (so approved emails are really sent)
+## 5. Connect Gmail and Google Calendar
 
 One-time setup in Google Cloud (about 10 minutes):
 
 1. Go to **console.cloud.google.com**, create a project (e.g. "Workforce OS").
-2. **APIs & Services → Library**: enable the **Gmail API**.
+2. **APIs & Services → Library**: enable the **Gmail API** and the **Google Calendar API**.
 3. **Google Auth Platform → Branding / Audience** (the OAuth consent screen):
    - User type **External**, app name "Workforce OS", your email as support contact.
-   - **Data access → Add scopes**: `openid`, `.../auth/userinfo.email` and
-     `.../auth/gmail.send` (*Send email on your behalf*). Nothing else.
+   - **Data access → Add scopes** (nothing else):
+     - `openid`, `.../auth/userinfo.email`
+     - `.../auth/gmail.send`: *Send email on your behalf*
+     - `.../auth/calendar.events.owned`: *create events on calendars you own*
+     - `.../auth/calendar.freebusy`: *view your availability* (busy times only)
 4. **Publishing status**: while the app is in **Testing**, add your Gmail as a *test
    user*. Google then makes the connection **expire every 7 days** (you'd have to
    reconnect weekly). To avoid that, click **Publish app**. Google shows an
    "unverified app" warning on the sign-in screen (click *Advanced → continue*); that's
    fine for your own use (up to 100 users without Google's verification).
 5. **Clients → Create client → Web application**:
-   - Authorized redirect URI: `https://<your-api>/connections/gmail/callback`
-     (e.g. `https://workforce-api.onrender.com/connections/gmail/callback`).
+   - Authorized redirect URI: `https://<your-api>/connections/google/callback`
+     (e.g. `https://workforce-api.onrender.com/connections/google/callback`). One URI
+     serves Gmail and Calendar.
    - Copy the **Client ID** and **Client secret**.
 6. Make an encryption key (keep it secret; it protects the stored Google tokens):
    `python -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"`
@@ -127,11 +131,18 @@ One-time setup in Google Cloud (about 10 minutes):
    `GOOGLE_REDIRECT_URI` (the URI from step 5) and `TOKEN_ENCRYPTION_KEY`; on
    **workforce-worker**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and the **same**
    `TOKEN_ENCRYPTION_KEY`.
-8. In the app: **Settings → Connect Gmail** (phone) or **Integrations → Connect Gmail**
-   (web), sign in with Google and allow *Send email on your behalf*.
+8. In the app: **Settings → Connect Gmail / Connect Google Calendar** (phone) or
+   **Integrations** (web). Sign in with Google and allow what each asks for. Each is a
+   separate connection you can disconnect on its own.
+9. Check your **time zone** (Settings on the phone, Integrations on the web). It defaults
+   to India (IST); meetings and "next Friday" use it.
 
-What the app can and can't do with Gmail: it can only **send** emails, and only ones you
-approve on the Approvals screen. It can't read, search or delete your mail. Tokens are
+What the app can and can't do:
+- **Gmail:** only **send** emails, and only ones you approve. It can't read, search or
+  delete your mail.
+- **Calendar:** see when you're **busy** (not what your meetings are) and **add events you
+  approve** to calendars you own. If an event has guests, Google emails them invitations;
+  the approval card says so. Tokens are
 stored encrypted; **Disconnect** revokes access at Google and deletes them. You can
 also remove access anytime at myaccount.google.com → Security → Third-party connections.
 
@@ -153,7 +164,8 @@ also remove access anytime at myaccount.google.com → Security → Third-party 
 | `prepared statement … does not exist` | Use the session pooler (5432) string |
 | Phone app can't connect | `EXPO_PUBLIC_API_URL` must be the public `https://` API URL |
 | "Gmail isn't set up on the server" | Set the Google variables and `TOKEN_ENCRYPTION_KEY` on the API and worker, redeploy |
-| Google says `redirect_uri_mismatch` | `GOOGLE_REDIRECT_URI` must exactly match the URI in the Google client |
-| Gmail stops working after a week | The Google app is still in *Testing*; publish it (step 5.4) and reconnect |
+| Google says `redirect_uri_mismatch` | `GOOGLE_REDIRECT_URI` must exactly match the URI in the Google client (`…/connections/google/callback`) |
+| Meeting at the wrong time | Set your time zone in Settings / Integrations |
+| Gmail or Calendar stops working after a week | The Google app is still in *Testing*; publish it (step 5.4) and reconnect |
 | Approved email says "Reconnect Gmail" | Access was revoked or expired: Settings → Reconnect Gmail, then ask again |
 | No push notifications | Real phone + development/store build (not Expo Go), notifications allowed, FCM/APNs credentials set in EAS |

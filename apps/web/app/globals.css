@@ -228,3 +228,5 @@ input[type="search"] { margin-bottom: 4px; }
 /* Connected accounts */
 .notice { background: var(--bg); border-left: 3px solid var(--ok); padding: 8px 12px; border-radius: 8px; }
 .connected { align-items: flex-start; }
+.service { padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--border); }
+.check select { font: inherit; font-size: 0.85rem; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 4px 6px; }

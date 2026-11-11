@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: str | None = None
     # Must match the redirect URI registered in Google Cloud, e.g.
-    # https://workforce-api.onrender.com/connections/gmail/callback
+    # https://workforce-api.onrender.com/connections/google/callback
     google_redirect_uri: str | None = None
     # base64 of 32 random bytes; the worker needs the same value.
     token_encryption_key: str | None = None

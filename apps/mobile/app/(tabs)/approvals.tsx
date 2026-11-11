@@ -5,6 +5,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { ApprovalCard } from '@/components/ApprovalCard';
 import { Button, Card, ErrorText, H, T, styles } from '@/components/ui';
 import { api, type ApprovalItem, type ProviderConnections } from '@/lib/api';
+import { ACTION_SERVICE } from '@/lib/labels';
 import { useTheme } from '@/lib/theme';
 
 export default function ApprovalsScreen() {
@@ -13,7 +14,7 @@ export default function ApprovalsScreen() {
   const [decided, setDecided] = useState<ApprovalItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [gmailReady, setGmailReady] = useState(true);
+  const [missing, setMissing] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -24,8 +25,14 @@ export default function ApprovalsScreen() {
       ]);
       setPending(p);
       setDecided(d);
-      const gmail = conns.find((x) => x.provider === 'gmail');
-      setGmailReady(!gmail || gmail.accounts.some((a) => a.status === 'active'));
+      const notReady = new Set(
+        conns.filter((x) => !x.accounts.some((a) => a.status === 'active')).map((x) => x.provider),
+      );
+      const needed = p
+        .map((a) => ACTION_SERVICE[a.action])
+        .filter((svc) => svc && notReady.has(svc.provider))
+        .map((svc) => svc.name);
+      setMissing([...new Set(needed)]);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -66,13 +73,13 @@ export default function ApprovalsScreen() {
       </T>
       <ErrorText>{error}</ErrorText>
 
-      {!gmailReady && pending?.some((a) => a.action === 'send_email') && (
+      {missing.length > 0 && (
         <Card style={{ borderColor: c.warn, marginTop: 12 }}>
-          <T bold>Connect Gmail to send these emails</T>
+          <T bold>Connect {missing.join(' and ')} first</T>
           <T small muted style={{ marginVertical: 6 }}>
-            Without it, approved emails are recorded but not sent.
+            Without it, approved actions are recorded but not carried out.
           </T>
-          <Button title="Connect Gmail" variant="ghost" onPress={() => router.push('/settings')} />
+          <Button title="Open Settings" variant="ghost" onPress={() => router.push('/settings')} />
         </Card>
       )}
 

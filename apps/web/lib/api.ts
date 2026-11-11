@@ -152,7 +152,7 @@ export async function downloadArtifact(a: Artifact) {
 export interface Me {
   user_id: string;
   email: string | null;
-  workspace: { id: string; name: string; role: string; kill_switch: boolean };
+  workspace: { id: string; name: string; role: string; kill_switch: boolean; timezone: string };
 }
 
 export interface Agent {
@@ -281,11 +281,21 @@ const FIELD_LABEL: Record<string, string> = {
   network: "Network", title: "Title", start: "Starts", end: "Ends", symbol: "Stock",
   side: "Buy/Sell", quantity: "Quantity", order_type: "Order type", amount: "Amount",
   currency: "Currency", url: "Website", fields: "Form details", offer_id: "Offer",
+  attendees: "Invites", location: "Location", description: "Notes",
+  duration_minutes: "Duration (minutes)", timezone: "Time zone",
 };
 
 export const fieldLabel = (k: string) => FIELD_LABEL[k] ?? k.replaceAll("_", " ");
 
-export function fieldValue(v: unknown): string {
+const WHEN_FIELDS = new Set(["start", "end"]);
+
+export function fieldValue(v: unknown, key?: string): string {
+  if (typeof v === "string" && key && WHEN_FIELDS.has(key)) {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    }
+  }
   if (typeof v === "string") return v;
   if (v && typeof v === "object") {
     return Object.entries(v as Record<string, unknown>)
@@ -316,8 +326,13 @@ export function formatMoney(amount: string, currency: string | null): string {
 }
 
 /** Payload fields to list (amount/currency are shown separately, large). */
+const FIELD_ORDER = ["title", "to", "subject", "start", "end", "duration_minutes", "timezone", "location", "attendees", "network", "message", "text", "body", "description"];
+
 export function detailEntries(payload: Record<string, unknown>, hasAmount: boolean): [string, unknown][] {
-  return Object.entries(payload).filter(([k]) => !(hasAmount && (k === "amount" || k === "currency")));
+  const rank = (k: string) => (FIELD_ORDER.includes(k) ? FIELD_ORDER.indexOf(k) : FIELD_ORDER.length);
+  return Object.entries(payload)
+    .filter(([k]) => !(hasAmount && (k === "amount" || k === "currency")))
+    .sort(([a], [b]) => rank(a) - rank(b));
 }
 
 /** Text fields the owner may reword before approving (matches the API). */
@@ -345,6 +360,25 @@ export interface ConnectedAccount {
 export interface ProviderConnections {
   provider: string;
   name: string;
+  description: string;
   configured: boolean;
   accounts: ConnectedAccount[];
 }
+
+/** Which connected service an approved action needs. */
+export const ACTION_SERVICE: Record<string, { provider: string; name: string }> = {
+  send_email: { provider: "gmail", name: "Gmail" },
+  calendar_create_event: { provider: "google_calendar", name: "Google Calendar" },
+};
+
+export const TIMEZONES: { zone: string; label: string }[] = [
+  { zone: "Asia/Kolkata", label: "India (IST)" },
+  { zone: "Asia/Dubai", label: "Dubai (GST)" },
+  { zone: "Asia/Singapore", label: "Singapore" },
+  { zone: "Europe/London", label: "London" },
+  { zone: "Europe/Berlin", label: "Berlin / Paris" },
+  { zone: "America/New_York", label: "New York" },
+  { zone: "America/Los_Angeles", label: "Los Angeles" },
+  { zone: "Australia/Sydney", label: "Sydney" },
+  { zone: "UTC", label: "UTC" },
+];
