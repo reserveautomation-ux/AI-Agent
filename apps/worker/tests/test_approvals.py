@@ -66,7 +66,7 @@ def test_approved_but_not_connected_is_reported_honestly(database_url, db, works
     llm = FakeLLM(None, None, None)  # no model calls needed to carry out approvals
     assert run(database_url, lambda c: advance(c, llm, task)) == "failed"
     status, summary = _summary(db, task)
-    assert "isn't connected yet" in summary and "Nothing was sent" in summary
+    assert "Gmail isn't set up on the server yet" in summary and "wasn't sent" in summary
     appr = db.execute(
         "select status::text from approval_requests where task_id = %s", (task,)
     ).fetchone()[0]
