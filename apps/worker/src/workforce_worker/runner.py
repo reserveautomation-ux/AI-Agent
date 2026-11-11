@@ -25,6 +25,7 @@ from workforce_core.db import sync_tool_definitions
 
 from .agent_loop import AgentError
 from .browser import BrowserService, DomainPolicy
+from .evolution import evolve_due_workspaces
 from .executor import Integrations
 from .inbox import check_inboxes
 from .llm import LLM, AnthropicLLM, BudgetExceeded, Refused
@@ -216,6 +217,7 @@ async def worker_loop(
 ) -> None:
     worker_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
     next_inbox_check = 0.0
+    next_evolution_check = 0.0
     async with await connect(settings.database_url) as conn:
         while not stop.is_set():
             # Expire unanswered approvals and wake tasks whose approvals are all decided.
@@ -226,6 +228,10 @@ async def worker_loop(
                 await fire_due(conn, pusher)
             except Exception:  # noqa: BLE001 - never stop task processing
                 log.exception("firing schedules failed")
+            # Nightly self-improvement of each workspace's workforce (one worker at a time).
+            if time.monotonic() >= next_evolution_check:
+                next_evolution_check = time.monotonic() + 600
+                await _evolution_pass(conn, llm, pusher)
             # Important-email alerts (only one worker at a time does this, via an advisory lock).
             if integrations is not None and time.monotonic() >= next_inbox_check:
                 next_inbox_check = time.monotonic() + settings.inbox_check_seconds
@@ -249,6 +255,23 @@ async def worker_loop(
                 integrations=integrations,
             )
             log.info("task %s -> %s", task_id, status)
+
+
+async def _evolution_pass(conn: AsyncConnection, llm: LLM, pusher) -> None:
+    try:
+        got = await (
+            await conn.execute("select pg_try_advisory_lock(hashtext('evolution')) as ok")
+        ).fetchone()
+        if not got["ok"]:
+            return
+        try:
+            for report in await evolve_due_workspaces(conn, llm, pusher):
+                if report.changes:
+                    log.info("workforce %s evolved: %s", report.workspace_id, report.text())
+        finally:
+            await conn.execute("select pg_advisory_unlock(hashtext('evolution'))")
+    except Exception:  # noqa: BLE001 - never stop task processing
+        log.exception("workforce evolution failed")
 
 
 async def _inbox_pass(conn: AsyncConnection, integrations: Integrations, pusher) -> None:

@@ -570,3 +570,4 @@ a.wa-btn {
   display: inline-block; background: #1f9d55; color: #fff; text-decoration: none; font-weight: 600;
   border-radius: 999px; padding: 9px 20px;
 }
+.lessons { margin: 6px 0 0; padding-left: 18px; } .evolve-card .check { color: var(--text); font-size: 1rem; }

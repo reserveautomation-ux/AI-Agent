@@ -69,7 +69,7 @@ async def run_agent(
 ) -> dict[str, Any]:
     agent: AgentInfo = gateway.agent
     ctx = gateway.ctx
-    system = SPECIALIST.format(name=agent.name, description=agent.description)
+    system = SPECIALIST.format(name=agent.name, description=agent.description) + agent.lessons
     tools = gateway.tool_definitions()
     messages: list[dict[str, Any]] = [
         {"role": "user", "content": f"{context}\n\n## Your step\n{instructions}"}

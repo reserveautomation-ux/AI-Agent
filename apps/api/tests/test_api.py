@@ -611,3 +611,13 @@ def test_cors_origins_are_forgiving(monkeypatch):
     assert Settings(**base).cors_origins == ["https://a.example.com", "https://b.example.com"]
     monkeypatch.setenv("CORS_ORIGINS", '["https://c.example.com"]')
     assert Settings(**base).cors_origins == ["https://c.example.com"]
+
+
+def test_auto_improve_switch(client, make_user):
+    h = auth(make_user())
+    client.post("/workforce/bootstrap", headers=h)
+    wf = client.get("/workforce", headers=h).json()
+    assert wf["auto_improve"] is True and wf["last_improved_at"] is None
+    assert all(a["generation"] == 1 and a["lessons"] == [] for a in wf["agents"])
+    off = client.post("/workforce/auto-improve", json={"enabled": False}, headers=h).json()
+    assert off["auto_improve"] is False

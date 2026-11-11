@@ -189,6 +189,8 @@ export interface Agent {
   allowed_tools: string[];
   description: string | null;
   latest_evaluation: { sample_size: number; success_rate: number | null; quality_score: number | null } | null;
+  lessons: string[];
+  generation: number;
 }
 
 export interface Department {
@@ -200,6 +202,8 @@ export interface Department {
 export interface Workforce {
   departments: Department[];
   agents: Agent[];
+  auto_improve: boolean;
+  last_improved_at: string | null;
 }
 
 export interface LifecycleDecision {

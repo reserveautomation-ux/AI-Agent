@@ -29,7 +29,19 @@ function AgentCard({ agent, onAction }: { agent: Agent; onAction: (a: Agent, op:
         {ev
           ? `Success ${pct(ev.success_rate)} · Quality ${pct(ev.quality_score)} · ${ev.sample_size} tasks`
           : "Not evaluated yet"}
+        {agent.generation > 1 && ` · generation ${agent.generation}`}
+        {agent.status === "sandbox" && " · on trial (gets some work, fully checked)"}
       </div>
+      {agent.lessons.length > 0 && (
+        <details className="small">
+          <summary>Lessons learned ({agent.lessons.length})</summary>
+          <ul className="lessons">
+            {agent.lessons.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       <div className="actions">
         {agent.status === "active" && agent.role !== "chief" && (
           <button className="ghost small" onClick={() => onAction(agent, "clone")}>
@@ -129,6 +141,29 @@ export default function WorkforcePage() {
         </div>
       </div>
       {error && <p className="error-text">{error}</p>}
+
+      <div className="card evolve-card">
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={wf.auto_improve}
+            disabled={busy}
+            onChange={(e) =>
+              run(async () =>
+                setWf(await post<Workforce>("/workforce/auto-improve", { enabled: e.target.checked })),
+              )
+            }
+          />
+          <strong>🧬 Let the workforce improve itself every night</strong>
+        </label>
+        <p className="muted small">
+          Strong agents are cloned, and each clone learns from the checker&apos;s feedback, then proves
+          itself on supervised trial work before it&apos;s promoted. Weak agents are paused, then
+          retired (their history is kept). A job is never left without an agent, the Chief is never
+          changed automatically, and approvals still apply to everything.
+          {wf.last_improved_at && ` Last review: ${new Date(wf.last_improved_at).toLocaleString()}.`}
+        </p>
+      </div>
 
       {review && (
         <div className="card">

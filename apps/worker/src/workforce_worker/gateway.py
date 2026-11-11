@@ -75,6 +75,7 @@ class AgentInfo:
     allowed_tools: list[str]
     model: str = "claude-opus-5-5"
     effort: str = "medium"
+    lessons: str = ""  # working rules learned from the checker's feedback (self-evolution)
 
 
 @dataclass

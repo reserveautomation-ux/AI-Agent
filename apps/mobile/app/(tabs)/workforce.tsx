@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, RefreshControl, ScrollView, View } from 'react-native';
+import { Alert, RefreshControl, ScrollView, Switch, View } from 'react-native';
 
 import { Badge, Button, Card, ErrorText, H, T, styles } from '@/components/ui';
 import { api, post, type Agent, type LifecycleDecision, type Workforce } from '@/lib/api';
@@ -23,7 +23,19 @@ function AgentCard({ agent, onAction }: { agent: Agent; onAction: (a: Agent, op:
         {ev
           ? `Success ${pct(ev.success_rate)} · Quality ${pct(ev.quality_score)} · ${ev.sample_size} tasks`
           : 'Not evaluated yet'}
+        {agent.generation > 1 ? ` · generation ${agent.generation}` : ''}
+        {agent.status === 'sandbox' ? ' · on trial' : ''}
       </T>
+      {agent.lessons.length > 0 && (
+        <View style={{ marginTop: 6 }}>
+          <T small bold>Lessons learned</T>
+          {agent.lessons.slice(0, 4).map((l) => (
+            <T key={l} small muted>
+              • {l}
+            </T>
+          ))}
+        </View>
+      )}
       <View style={[styles.row, { marginTop: 10, flexWrap: 'wrap' }]}>
         {agent.status === 'active' && agent.role !== 'chief' && (
           <Button title="Clone" small variant="ghost" onPress={() => onAction(agent, 'clone')} />
@@ -125,6 +137,27 @@ export default function WorkforceScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={styles.screen} refreshControl={refreshControl}>
+      {wf && (
+        <Card>
+          <View style={styles.between}>
+            <T bold style={{ flex: 1 }}>
+              🧬 Improve itself every night
+            </T>
+            <Switch
+              value={wf.auto_improve}
+              disabled={busy}
+              onValueChange={(v) =>
+                run(async () => setWf(await post<Workforce>('/workforce/auto-improve', { enabled: v })))
+              }
+              accessibilityLabel="Let the workforce improve itself every night"
+            />
+          </View>
+          <T small muted style={{ marginTop: 6 }}>
+            Strong agents are cloned and learn from feedback, then prove themselves on supervised trial work. Weak
+            ones are paused, then retired (history kept). Approvals still apply to everything.
+          </T>
+        </Card>
+      )}
       <Button
         title="Review performance"
         variant="ghost"

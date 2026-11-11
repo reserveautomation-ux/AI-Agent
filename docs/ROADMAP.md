@@ -12,6 +12,7 @@ Prices change; check each provider before switching something on.
 | Voice | Device voices, or a natural voice built into the web app (one-time ~90 MB download) | Free |
 | Photos & PDFs | Send a bill, form or screenshot and the assistant reads it | Claude usage |
 | Workforce tasks | Chief plans, specialist agents work, a verifier checks, you approve | Claude usage |
+| Self-improving workforce | Every night: clone strong agents (clones learn from the checker's feedback and inherit lessons), trial clones on supervised work, promote or retire them, pause then retire weak agents; morning digest | Claude usage (small) |
 | Web research | Search and read the web; run code; make spreadsheets and documents | Claude usage (+$0.01 per search) |
 | Browser | Sandboxed browser for sites that allow automation | Free |
 | Gmail | Send approved email; read and summarise your inbox; save reply drafts | Free |

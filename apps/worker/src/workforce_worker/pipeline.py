@@ -21,6 +21,7 @@ from .agent_loop import AgentError, run_agent
 from .artifacts import csv_stats
 from .browser import BlockedURL, BrowserError, BrowserService
 from .evaluations import refresh_evaluations
+from .evolution import lessons_text, trial_pick
 from .executor import (
     ACTION_LABELS,
     ActionFailed,
@@ -158,7 +159,21 @@ def _agent_from_row(r: dict) -> AgentInfo:
         allowed_tools=list(r["allowed_tools"] or []),
         model=cfg.get("model", "claude-opus-5-5"),
         effort=cfg.get("effort", "medium"),
+        lessons=lessons_text(cfg),
     )
+
+
+async def trial_agents(conn: AsyncConnection, workspace_id: str) -> list[AgentInfo]:
+    """Sandbox clones on trial: they get a share of steps, under the same checks."""
+    rows = await (
+        await conn.execute(
+            """select id::text, name, template_key, role, allowed_tools, config_json
+               from public.agents where workspace_id = %s and status = 'sandbox'
+               order by created_at""",
+            (workspace_id,),
+        )
+    ).fetchall()
+    return [_agent_from_row(r) for r in rows]
 
 
 async def active_agents(conn: AsyncConnection, workspace_id: str) -> list[AgentInfo]:
@@ -318,6 +333,9 @@ async def run_steps(
     integrations: Integrations | None = None,
 ) -> None:
     agents = {a.id: a for a in await active_agents(conn, task.workspace_id)}
+    on_trial = await trial_agents(conn, task.workspace_id)
+    trials = {a.template_key: a for a in on_trial}
+    trial_ids = {a.id: a for a in on_trial}
     steps = await (
         await conn.execute(
             """select id::text, sequence, title, description, agent_id::text, input_json,
@@ -333,7 +351,19 @@ async def run_steps(
         if step["status"] in ("succeeded", "skipped"):
             continue
         await ensure_running(conn, task)
-        agent = agents.get(step["agent_id"]) or _replacement(agents, step)
+        agent = (
+            agents.get(step["agent_id"])
+            or trial_ids.get(step["agent_id"])
+            or _replacement(agents, step)
+        )
+        challenger = trials.get(agent.template_key) if agent else None
+        if (
+            challenger
+            and step["status"] == "pending"
+            and not step["retry_count"]
+            and trial_pick(step["id"])
+        ):
+            agent = challenger  # supervised trial: same verifier and approvals apply
         if agent is None:
             raise AgentError(f"no active agent available for step {step['sequence']}")
 

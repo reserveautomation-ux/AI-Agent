@@ -1,5 +1,6 @@
 """Workforce: org chart, hiring the initial team, cloning, promotion, retirement."""
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -43,6 +44,8 @@ class AgentOut(BaseModel):
     allowed_tools: list[str]
     description: str | None = None
     latest_evaluation: dict[str, Any] | None = None
+    lessons: list[str] = []  # working rules learned from the checker's feedback
+    generation: int = 1  # 1 = original, 2 = first clone, ...
 
 
 class DepartmentOut(BaseModel):
@@ -55,6 +58,12 @@ class DepartmentOut(BaseModel):
 class WorkforceOut(BaseModel):
     departments: list[DepartmentOut]
     agents: list[AgentOut]
+    auto_improve: bool = True  # nightly clone / trial / retire
+    last_improved_at: datetime | None = None
+
+
+class AutoImproveIn(BaseModel):
+    enabled: bool
 
 
 class LifecycleDecision(BaseModel):
@@ -71,6 +80,8 @@ def _agent_out(row: dict, evaluation: dict | None = None) -> AgentOut:
         **{k: row[k] for k in AgentOut.model_fields if k in row},
         description=(row.get("config_json") or {}).get("description"),
         latest_evaluation=evaluation,
+        lessons=list((row.get("config_json") or {}).get("lessons") or []),
+        generation=int((row.get("config_json") or {}).get("generation") or 1),
     )
 
 
@@ -130,10 +141,38 @@ async def get_workforce(user: UserDep, conn: ConnDep) -> WorkforceOut:
         )
     ).fetchall()
     evals = await _latest_evaluations(conn, user.workspace_id)
+    ws = await (
+        await conn.execute(
+            "select auto_workforce, evolved_at from public.workspaces where id = %s",
+            (user.workspace_id,),
+        )
+    ).fetchone()
     return WorkforceOut(
         departments=[DepartmentOut(**d) for d in depts],
         agents=[_agent_out(a, evals.get(a["id"])) for a in agents],
+        auto_improve=ws["auto_workforce"],
+        last_improved_at=ws["evolved_at"],
     )
+
+
+@router.post("/workforce/auto-improve", response_model=WorkforceOut)
+async def set_auto_improve(body: AutoImproveIn, user: AdminDep, conn: ConnDep) -> WorkforceOut:
+    """Let the workforce clone strong agents and retire weak ones every night (or not)."""
+    await conn.execute(
+        "update public.workspaces set auto_workforce = %s where id = %s",
+        (body.enabled, user.workspace_id),
+    )
+    await record_audit(
+        conn,
+        workspace_id=user.workspace_id,
+        actor_type="user",
+        actor_id=user.user_id,
+        action="workforce.auto_improve_on" if body.enabled else "workforce.auto_improve_off",
+        target_type="workspace",
+        target_id=user.workspace_id,
+        event={},
+    )
+    return await get_workforce(user, conn)
 
 
 @router.post("/workforce/bootstrap", response_model=WorkforceOut)

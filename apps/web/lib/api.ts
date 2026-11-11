@@ -188,6 +188,10 @@ export interface Agent {
     success_rate: number | null;
     quality_score: number | null;
   } | null;
+  /** Working rules learned from the checker's feedback. */
+  lessons: string[];
+  /** 1 = original, 2 = first clone, ... */
+  generation: number;
 }
 
 export interface Department {
@@ -200,6 +204,9 @@ export interface Department {
 export interface Workforce {
   departments: Department[];
   agents: Agent[];
+  /** Nightly: clone strong agents, trial the clones, retire weak ones. */
+  auto_improve: boolean;
+  last_improved_at: string | null;
 }
 
 export interface LifecycleDecision {
