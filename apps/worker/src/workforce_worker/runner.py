@@ -23,6 +23,7 @@ from workforce_core.db import sync_tool_definitions
 
 from .agent_loop import AgentError
 from .browser import BrowserService, DomainPolicy
+from .executor import Integrations
 from .llm import LLM, AnthropicLLM, BudgetExceeded, Refused
 from .notify import ExpoPusher, Pusher, notify_task
 from .pipeline import TaskStopped, advance, load_task, transition
@@ -132,11 +133,12 @@ async def process_one(
     database_url: str,
     browser: BrowserService | None = None,
     pusher: Pusher | None = None,
+    integrations: Integrations | None = None,
 ) -> str | None:
     heartbeat = asyncio.create_task(_heartbeat(database_url, task_id, worker_id))
     shutting_down = False
     try:
-        return await _process(conn, llm, task_id, attempts, browser)
+        return await _process(conn, llm, task_id, attempts, browser, integrations)
     except asyncio.CancelledError:
         # The worker is stopping (deploy/restart). Hand the task back now so another
         # worker resumes it from its last checkpoint instead of waiting for the lease.
@@ -161,9 +163,10 @@ async def _process(
     task_id: str,
     attempts: int,
     browser: BrowserService | None,
+    integrations: Integrations | None = None,
 ) -> str | None:
     try:
-        status = await advance(conn, llm, task_id, browser)
+        status = await advance(conn, llm, task_id, browser, integrations)
         await release(conn, task_id)
         return status
     except TaskStopped as exc:
@@ -204,6 +207,7 @@ async def worker_loop(
     browser: BrowserService | None,
     stop: asyncio.Event,
     pusher: Pusher | None = None,
+    integrations: Integrations | None = None,
 ) -> None:
     worker_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
     async with await connect(settings.database_url) as conn:
@@ -227,6 +231,7 @@ async def worker_loop(
                 database_url=settings.database_url,
                 browser=browser,
                 pusher=pusher,
+                integrations=integrations,
             )
             log.info("task %s -> %s", task_id, status)
 
@@ -243,7 +248,9 @@ async def main() -> None:
         browser = BrowserService(DomainPolicy())
         await browser.start()
     workers = [
-        asyncio.create_task(worker_loop(settings, llm, browser, stop, ExpoPusher()))
+        asyncio.create_task(
+            worker_loop(settings, llm, browser, stop, ExpoPusher(), Integrations.from_env())
+        )
         for _ in range(settings.worker_concurrency)
     ]
 

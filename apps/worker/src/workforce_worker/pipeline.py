@@ -20,7 +20,7 @@ from .agent_loop import AgentError, run_agent
 from .artifacts import csv_stats
 from .browser import BlockedURL, BrowserError, BrowserService
 from .evaluations import refresh_evaluations
-from .executor import ACTION_LABELS, NotConnected, execute_action
+from .executor import ACTION_LABELS, ActionFailed, Integrations, NotConnected, execute_action
 from .gateway import AgentInfo, StepContext, ToolGateway
 from .llm import LLM, call, json_of
 from .prompts import CHIEF_PLANNER, VERIFIER
@@ -574,7 +574,10 @@ async def approvals_decided(conn: AsyncConnection, task: Task) -> bool:
 
 
 async def finalize_approvals(
-    conn: AsyncConnection, task: Task, browser: BrowserService | None
+    conn: AsyncConnection,
+    task: Task,
+    browser: BrowserService | None,
+    integrations: Integrations | None = None,
 ) -> None:
     rows = await (
         await conn.execute(
@@ -642,10 +645,18 @@ async def finalize_approvals(
             if not claimed:
                 continue
             try:
-                text, ok = await execute_action(r["action"], r["action_payload"], browser), True
+                text = await execute_action(
+                    r["action"],
+                    r["action_payload"],
+                    browser,
+                    conn=conn,
+                    workspace_id=task.workspace_id,
+                    integrations=integrations,
+                )
+                ok = True
             except NotConnected as exc:
                 text, ok = str(exc), False
-            except (BrowserError, BlockedURL, ValueError, KeyError) as exc:
+            except (ActionFailed, BrowserError, BlockedURL, ValueError, KeyError) as exc:
                 text, ok = f"Couldn't do it: {exc}", False
             await finish_invocation(r["inv_id"], ok, text)
             await record_audit(
@@ -707,7 +718,11 @@ async def finalize_approvals(
 
 
 async def advance(
-    conn: AsyncConnection, llm: LLM, task_id: str, browser: BrowserService | None = None
+    conn: AsyncConnection,
+    llm: LLM,
+    task_id: str,
+    browser: BrowserService | None = None,
+    integrations: Integrations | None = None,
 ) -> str:
     """Advance a task as far as it can go now. Returns the resulting status."""
     task = await load_task(conn, task_id)
@@ -732,7 +747,7 @@ async def advance(
         targets = ("queued", "running") if task.status == "planned" else ("running",)
         await transition(conn, task, *targets, reason="worker started")
     if task.status == "running" and await approvals_decided(conn, task):
-        await finalize_approvals(conn, task, browser)
+        await finalize_approvals(conn, task, browser, integrations)
         return (await load_task(conn, task_id)).status
     if task.status == "running":
         await run_steps(conn, llm, task, policy, browser)
@@ -741,5 +756,5 @@ async def advance(
         await verify_task(conn, llm, task, policy)
         task = await load_task(conn, task_id)
         if task.status == "running":  # rework round
-            return await advance(conn, llm, task_id, browser)
+            return await advance(conn, llm, task_id, browser, integrations)
     return task.status

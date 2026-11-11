@@ -22,6 +22,27 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
+    # Connected accounts (Gmail). All optional: without them, "Connect Gmail" explains
+    # that the server isn't set up yet.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    # Must match the redirect URI registered in Google Cloud, e.g.
+    # https://workforce-api.onrender.com/connections/gmail/callback
+    google_redirect_uri: str | None = None
+    # base64 of 32 random bytes; the worker needs the same value.
+    token_encryption_key: str | None = None
+    # Where the OAuth callback may send the owner back to, besides cors_origins.
+    app_redirect_schemes: list[str] = Field(default_factory=lambda: ["workforceos://"])
+
+    @property
+    def gmail_configured(self) -> bool:
+        return bool(
+            self.google_client_id
+            and self.google_client_secret
+            and self.google_redirect_uri
+            and self.token_encryption_key
+        )
+
     @property
     def jwt_issuer(self) -> str:
         return f"{self.supabase_url.rstrip('/')}/auth/v1"

@@ -1,15 +1,17 @@
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from workforce_core.db import make_pool, sync_tool_definitions
 
 from .config import Settings, get_settings
 from .deps import ConnDep
-from .routes import approvals, memory, tasks, workforce, workspace
+from .routes import approvals, connections, memory, tasks, workforce, workspace
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, google_http=None) -> FastAPI:
+    """``google_http``: optional httpx.AsyncClient for Google calls (tests inject a mock)."""
     settings = settings or get_settings()
 
     @asynccontextmanager
@@ -19,10 +21,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with pool.connection() as conn:
             await sync_tool_definitions(conn)
         app.state.pool = pool
+        app.state.google_http = google_http or httpx.AsyncClient(timeout=20)
         try:
             yield
         finally:
             await pool.close()
+            if google_http is None:
+                await app.state.google_http.aclose()
 
     app = FastAPI(title="Workforce OS API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
@@ -44,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(workforce.router)
     app.include_router(memory.router)
     app.include_router(approvals.router)
+    app.include_router(connections.router)
     return app
 
 

@@ -316,6 +316,23 @@ class ToolGateway:
             self.ctx.artifacts.append(art)
             return f"Saved file {art['name']}{extra}."
 
+        if name == "draft_email":
+            # A draft is just text for the owner to see; sending is a separate,
+            # approval-gated action (send_email), so no mail account is needed here.
+            to, subject = str(args.get("to", "")), str(args.get("subject", ""))
+            body = str(args.get("body", ""))
+            art = await save_artifact(
+                self.conn,
+                workspace_id=self.ctx.workspace_id,
+                task_id=self.ctx.task_id,
+                step_id=self.ctx.step_id,
+                name=f"email draft {subject or to}"[:60],
+                fmt="markdown",
+                content=f"**To:** {to}\n\n**Subject:** {subject}\n\n{body}\n",
+            )
+            self.ctx.artifacts.append(art)
+            return f"Saved the draft as {art['name']}. To send it, use send_email (needs approval)."
+
         if name == "prepare_booking_link":
             provider = str(args.get("provider", "")).lower().strip()
             details = str(args.get("details", ""))
