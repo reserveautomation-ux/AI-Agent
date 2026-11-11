@@ -569,3 +569,14 @@ def test_money_actions_need_the_owner(client, make_user, db):
     assert r.status_code == 200
     # Strangers can't see or decide it.
     assert client.get("/approvals", headers=auth(make_user())).json() == []
+
+
+def test_timezone_defaults_to_india_and_can_change(client, make_user):
+    h = auth(make_user())
+    assert client.get("/me", headers=h).json()["workspace"]["timezone"] == "Asia/Kolkata"
+    r = client.post("/workspace/timezone", json={"timezone": "Europe/London"}, headers=h)
+    assert r.status_code == 200 and r.json()["timezone"] == "Europe/London"
+    assert (
+        client.post("/workspace/timezone", json={"timezone": "Mars/Base"}, headers=h).status_code
+        == 422
+    )

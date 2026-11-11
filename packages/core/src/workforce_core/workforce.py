@@ -110,8 +110,14 @@ _AGENT_DEFS: tuple[AgentTemplate, ...] = (
         "Calendar Agent",
         "specialist",
         "personal_executive",
-        "Schedules meetings and reminders.",
-        ("calendar_create_event", "set_reminder", "remember", "recall"),
+        "Finds free time and schedules meetings (with your approval) and reminders.",
+        (
+            "calendar_check_availability",
+            "calendar_create_event",
+            "set_reminder",
+            "remember",
+            "recall",
+        ),
     ),
     A(
         "pe_messaging",

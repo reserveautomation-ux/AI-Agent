@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 from test_api import SECRET, SUPABASE_URL, auth
 from workforce_api.config import Settings
 from workforce_api.main import create_app
-from workforce_core.google import GMAIL_SEND_SCOPE
+from workforce_core.google import (
+    CALENDAR_EVENTS_SCOPE,
+    CALENDAR_FREEBUSY_SCOPE,
+    GMAIL_SEND_SCOPE,
+)
 from workforce_core.secrets import SecretBox, secret_context
 
 KEY = base64.b64encode(os.urandom(32)).decode()
@@ -24,11 +28,10 @@ class FakeGoogle:
         if req.url.path == "/token":
             form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
             self.token_forms.append(form)
-            scope = (
-                "openid email"
-                if form.get("code") == "no-send"
-                else f"openid email {GMAIL_SEND_SCOPE}"
-            )
+            scope = {
+                "no-send": "openid email",
+                "cal": f"openid email {CALENDAR_EVENTS_SCOPE} {CALENDAR_FREEBUSY_SCOPE}",
+            }.get(form.get("code"), f"openid email {GMAIL_SEND_SCOPE}")
             if form.get("code") == "bad":
                 return httpx.Response(400, json={"error": "invalid_grant"})
             return httpx.Response(
@@ -70,8 +73,8 @@ def gclient(database_url, google):
         yield c
 
 
-def _start(client, h, redirect=f"{WEB}/integrations"):
-    r = client.post("/connections/gmail/start", json={"redirect_to": redirect}, headers=h)
+def _start(client, h, redirect=f"{WEB}/integrations", provider="gmail"):
+    r = client.post(f"/connections/{provider}/start", json={"redirect_to": redirect}, headers=h)
     assert r.status_code == 200, r.text
     q = {k: v[0] for k, v in parse_qs(urlsplit(r.json()["auth_url"]).query).items()}
     return q["state"]
@@ -180,3 +183,34 @@ def test_not_configured_server_explains(client, make_user):
     )
     assert r.status_code == 503 and "isn't set up" in r.text
     assert client.get("/connections", headers=auth(make_user())).json()[0]["configured"] is False
+
+
+def test_connect_calendar_separately(gclient, make_user):
+    h = auth(make_user())
+    r = gclient.post("/connections/google_calendar/start", json={"redirect_to": WEB}, headers=h)
+    q = {k: v[0] for k, v in parse_qs(urlsplit(r.json()["auth_url"]).query).items()}
+    assert set(q["scope"].split()) == {
+        "openid",
+        "email",
+        CALENDAR_EVENTS_SCOPE,
+        CALENDAR_FREEBUSY_SCOPE,
+    }
+    assert GMAIL_SEND_SCOPE not in q["scope"]  # each service asks only for its own access
+    # The shared Google callback stores it as a Calendar connection.
+    r = gclient.get(
+        f"/connections/google/callback?state={q['state']}&code=cal", follow_redirects=False
+    )
+    assert r.headers["location"] == f"{WEB}?connected=google_calendar"
+    providers = {p["provider"]: p for p in gclient.get("/connections", headers=h).json()}
+    assert [a["display_name"] for a in providers["google_calendar"]["accounts"]] == [
+        "asha@gmail.com"
+    ]
+    assert providers["gmail"]["accounts"] == []
+    # Calendar without its event permission is refused.
+    state = _start(gclient, h, provider="google_calendar")
+    r = _callback(gclient, state, code="good")  # granted gmail.send only, not calendar
+    assert r.headers["location"].endswith("status=missing_permission")
+    assert (
+        gclient.post("/connections/slack/start", json={"redirect_to": WEB}, headers=h).status_code
+        == 404
+    )

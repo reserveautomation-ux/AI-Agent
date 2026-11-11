@@ -23,6 +23,7 @@ from workforce_core.tools import TOOLS_BY_NAME
 
 from .artifacts import csv_stats, save_artifact
 from .browser import BlockedURL, BrowserError, BrowserService
+from .executor import ActionFailed, Integrations, NotConnected, check_availability
 from .prompts import untrusted
 
 # Tools executed by Anthropic's servers (declared, not run by us).
@@ -72,11 +73,13 @@ class ToolGateway:
         ctx: StepContext,
         agent: AgentInfo,
         browser: BrowserService | None = None,
+        integrations: Integrations | None = None,
     ):
         self.conn = conn
         self.ctx = ctx
         self.agent = agent
         self.browser = browser
+        self.integrations = integrations or Integrations()
 
     # --- what the model sees ------------------------------------------------------
 
@@ -315,6 +318,14 @@ class ToolGateway:
             )
             self.ctx.artifacts.append(art)
             return f"Saved file {art['name']}{extra}."
+
+        if name == "calendar_check_availability":
+            try:
+                return await check_availability(
+                    self.conn, self.ctx.workspace_id, args, self.integrations
+                )
+            except (NotConnected, ActionFailed) as exc:
+                raise NotImplementedError(str(exc)) from exc
 
         if name == "draft_email":
             # A draft is just text for the owner to see; sending is a separate,

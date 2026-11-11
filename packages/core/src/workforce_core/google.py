@@ -10,6 +10,7 @@ import hashlib
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 from email.utils import formataddr, getaddresses
 from typing import Any
@@ -181,3 +182,167 @@ async def gmail_send(http: httpx.AsyncClient, access_token: str, msg: EmailMessa
             detail = resp.text
         raise GoogleError(f"Gmail refused to send: {detail}")
     return resp.json()
+
+
+# --- calendar --------------------------------------------------------------------
+
+# Narrowest scopes Google offers for this: create events only on calendars you own,
+# and see free/busy only (not meeting details).
+CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned"
+CALENDAR_FREEBUSY_SCOPE = "https://www.googleapis.com/auth/calendar.freebusy"
+CALENDAR_SCOPES = ("openid", "email", CALENDAR_EVENTS_SCOPE, CALENDAR_FREEBUSY_SCOPE)
+CALENDAR_API = "https://www.googleapis.com/calendar/v3"
+
+
+class EventExists(GoogleError):
+    """Google reported this event id already exists (treated as already created).
+
+    Our own at-most-once approval handling is the real guarantee; a fixed event id is
+    a second safeguard Google may or may not detect.
+    """
+
+
+def _parse_time(value: str, tz: str) -> datetime:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    try:
+        zone = ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError(f"unknown time zone {tz!r}") from exc
+    try:
+        dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{value!r} is not a date and time like 2026-11-15T16:00") from exc
+    return dt if dt.tzinfo else dt.replace(tzinfo=zone)
+
+
+def event_id_for(key: str) -> str:
+    """Deterministic event id (lowercase hex is valid base32hex) so a retry can't duplicate."""
+    return "wf" + hashlib.sha256(key.encode()).hexdigest()[:40]
+
+
+def build_event(
+    *,
+    title: str,
+    start: str,
+    end: str | None = None,
+    timezone: str = "Asia/Kolkata",
+    duration_minutes: int | None = None,
+    attendees: str | list[str] | None = None,
+    location: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    if not title or not title.strip():
+        raise ValueError("the event needs a title")
+    begin = _parse_time(start, timezone)
+    if end:
+        finish = _parse_time(end, timezone)
+    else:
+        finish = begin + timedelta(minutes=duration_minutes or 30)
+    if finish <= begin:
+        raise ValueError("the event must end after it starts")
+    if finish - begin > timedelta(days=14):
+        raise ValueError("the event is longer than 14 days")
+    if isinstance(attendees, str):
+        attendees = [a for a in attendees.replace(";", ",").split(",") if a.strip()]
+    people = []
+    for a in attendees or []:
+        people.extend(_addresses(a, "Attendees"))
+    body: dict[str, Any] = {
+        "summary": _clean_header("Title", title),
+        "start": {"dateTime": begin.isoformat(), "timeZone": timezone},
+        "end": {"dateTime": finish.isoformat(), "timeZone": timezone},
+    }
+    if people:
+        body["attendees"] = [{"email": p} for p in dict.fromkeys(people)]
+    if location:
+        body["location"] = location.strip()
+    if description:
+        body["description"] = description
+    return body
+
+
+async def calendar_insert(
+    http: httpx.AsyncClient,
+    access_token: str,
+    event: dict[str, Any],
+    *,
+    event_id: str,
+) -> dict[str, Any]:
+    """Create the event. Attendees (if any) get Google's invitation email, which the
+    owner saw on the approval card; Google advises against suppressing it."""
+    resp = await http.post(
+        f"{CALENDAR_API}/calendars/primary/events",
+        params={"sendUpdates": "all"} if event.get("attendees") else {},
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={**event, "id": event_id},
+    )
+    if resp.status_code == 401:
+        raise GrantRevoked("Google Calendar rejected the access token")
+    if resp.status_code == 409:
+        raise EventExists("this event was already created")
+    if resp.status_code >= 400:
+        try:
+            detail = resp.json().get("error", {}).get("message", resp.text)
+        except ValueError:
+            detail = resp.text
+        raise GoogleError(f"Google Calendar refused: {detail}")
+    return resp.json()
+
+
+async def calendar_busy(
+    http: httpx.AsyncClient, access_token: str, *, time_min: str, time_max: str, timezone: str
+) -> list[dict[str, str]]:
+    begin, finish = _parse_time(time_min, timezone), _parse_time(time_max, timezone)
+    if finish <= begin:
+        raise ValueError("time_max must be after time_min")
+    if finish - begin > timedelta(days=62):
+        raise ValueError("check at most about two months at a time")
+    resp = await http.post(
+        f"{CALENDAR_API}/freeBusy",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json={
+            "timeMin": begin.isoformat(),
+            "timeMax": finish.isoformat(),
+            "timeZone": timezone,
+            "items": [{"id": "primary"}],
+        },
+    )
+    if resp.status_code == 401:
+        raise GrantRevoked("Google Calendar rejected the access token")
+    if resp.status_code >= 400:
+        raise GoogleError(f"Google Calendar refused: {resp.text[:200]}")
+    cal = resp.json().get("calendars", {}).get("primary", {})
+    if cal.get("errors"):
+        raise GoogleError(f"Google Calendar couldn't read availability: {cal['errors']}")
+    return cal.get("busy", [])
+
+
+# --- which Google services can be connected ----------------------------------------
+
+
+@dataclass(frozen=True)
+class GoogleService:
+    key: str  # tool_connections.provider
+    name: str
+    scopes: tuple[str, ...]
+    required_scope: str  # refuse the connection if this one wasn't granted
+    description: str
+
+
+GOOGLE_SERVICES: dict[str, GoogleService] = {
+    "gmail": GoogleService(
+        "gmail",
+        "Gmail",
+        GMAIL_SCOPES,
+        GMAIL_SEND_SCOPE,
+        "Lets agents send emails you approve. Send only: it can't read or delete your mail.",
+    ),
+    "google_calendar": GoogleService(
+        "google_calendar",
+        "Google Calendar",
+        CALENDAR_SCOPES,
+        CALENDAR_EVENTS_SCOPE,
+        "Lets agents see when you're busy (not what your meetings are) and add events you approve.",
+    ),
+}

@@ -1,6 +1,7 @@
 from typing import Annotated, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from workforce_core.capabilities import CAPABILITIES
 from workforce_core.db import record_audit
@@ -9,7 +10,7 @@ from workforce_core.tools import TOOLS
 
 from ..auth import AdminDep, UserDep
 from ..deps import ConnDep
-from ..schemas import AuditEventOut, KillSwitchRequest, MeOut, WorkspaceOut
+from ..schemas import AuditEventOut, KillSwitchRequest, MeOut, TimezoneRequest, WorkspaceOut
 
 router = APIRouter(tags=["workspace"])
 
@@ -17,7 +18,7 @@ router = APIRouter(tags=["workspace"])
 async def _workspace(conn, user) -> WorkspaceOut:
     row = await (
         await conn.execute(
-            "select id::text, name, kill_switch from public.workspaces where id = %s",
+            "select id::text, name, kill_switch, timezone from public.workspaces where id = %s",
             (user.workspace_id,),
         )
     ).fetchone()
@@ -47,6 +48,22 @@ async def set_kill_switch(body: KillSwitchRequest, user: AdminDep, conn: ConnDep
             target_id=user.workspace_id,
             event={"reason": body.reason},
         )
+    return await _workspace(conn, user)
+
+
+@router.post("/workspace/timezone", response_model=WorkspaceOut)
+async def set_timezone(body: TimezoneRequest, user: AdminDep, conn: ConnDep) -> WorkspaceOut:
+    """The owner's time zone: used for calendar events and for 'today' in agent prompts."""
+    try:
+        ZoneInfo(body.timezone)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"unknown time zone {body.timezone!r}"
+        ) from exc
+    await conn.execute(
+        "update public.workspaces set timezone = %s where id = %s",
+        (body.timezone, user.workspace_id),
+    )
     return await _workspace(conn, user)
 
 

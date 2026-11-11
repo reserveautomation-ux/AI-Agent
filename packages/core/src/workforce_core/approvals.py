@@ -80,8 +80,14 @@ def derive_fields(args: dict[str, Any]) -> dict[str, Any]:
     return {
         "amount": amount,
         "currency": args.get("currency"),
-        "recipient": args.get("to") or args.get("recipient") or args.get("network"),
-        "item": args.get("symbol") or args.get("offer_id") or args.get("subject"),
+        "recipient": args.get("to")
+        or args.get("recipient")
+        or args.get("network")
+        or args.get("attendees"),
+        "item": args.get("symbol")
+        or args.get("offer_id")
+        or args.get("subject")
+        or args.get("title"),
     }
 
 

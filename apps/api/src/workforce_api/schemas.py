@@ -119,6 +119,11 @@ class WorkspaceOut(BaseModel):
     name: str
     role: str
     kill_switch: bool
+    timezone: str = "Asia/Kolkata"
+
+
+class TimezoneRequest(BaseModel):
+    timezone: str = Field(min_length=3, max_length=64)
 
 
 class MeOut(BaseModel):

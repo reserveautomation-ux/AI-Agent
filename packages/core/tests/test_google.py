@@ -137,3 +137,113 @@ def test_gmail_send_posts_raw_rfc822():
     assert result["id"] == "18c0ffee" and captured["auth"] == "Bearer at1"
     parsed = email.message_from_bytes(base64.urlsafe_b64decode(captured["raw"]))
     assert parsed["To"] == "rahul@example.com" and "Moved to Friday" in parsed.get_payload()
+
+
+# --- calendar --------------------------------------------------------------------
+
+from workforce_core.google import (  # noqa: E402
+    CALENDAR_EVENTS_SCOPE,
+    CALENDAR_SCOPES,
+    EventExists,
+    build_event,
+    calendar_busy,
+    calendar_insert,
+    event_id_for,
+)
+
+
+def test_calendar_asks_for_the_narrowest_scopes():
+    assert CALENDAR_EVENTS_SCOPE.endswith("calendar.events.owned")
+    assert set(CALENDAR_SCOPES) == {
+        "openid",
+        "email",
+        CALENDAR_EVENTS_SCOPE,
+        "https://www.googleapis.com/auth/calendar.freebusy",
+    }
+    assert not any(s.endswith("/calendar") or "readonly" in s for s in CALENDAR_SCOPES)
+
+
+def test_build_event_times_zones_and_attendees():
+    ev = build_event(
+        title="Design review",
+        start="2026-11-20T16:00",
+        duration_minutes=45,
+        attendees="Rahul <rahul@example.com>; asha@x.in, rahul@example.com",
+        location="Zoom",
+        timezone="Asia/Kolkata",
+    )
+    assert ev["start"] == {"dateTime": "2026-11-20T16:00:00+05:30", "timeZone": "Asia/Kolkata"}
+    assert ev["end"]["dateTime"] == "2026-11-20T16:45:00+05:30"
+    assert ev["attendees"] == [{"email": "rahul@example.com"}, {"email": "asha@x.in"}]
+    utc = build_event(title="x", start="2026-11-20T10:00Z", end="2026-11-20T11:00Z")
+    assert utc["start"]["dateTime"] == "2026-11-20T10:00:00+00:00"
+    for bad, msg in [
+        (dict(title="x", start="2026-11-20T16:00", end="2026-11-20T15:00"), "end after"),
+        (dict(title="x", start="next friday"), "not a date"),
+        (dict(title="x", start="2026-11-20T16:00", timezone="Mars/Base"), "time zone"),
+        (dict(title=" ", start="2026-11-20T16:00"), "title"),
+        (dict(title="x", start="2026-11-20T16:00", attendees="not-an-email"), "invalid email"),
+    ]:
+        with pytest.raises(ValueError, match=msg):
+            build_event(**bad)
+
+
+def test_calendar_insert_and_busy():
+    calls = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(req)
+        if req.url.path.endswith("/events"):
+            body = json.loads(req.content)
+            if body["id"] == "dup":
+                return httpx.Response(409, json={"error": {"message": "already exists"}})
+            return httpx.Response(200, json={"id": body["id"], "htmlLink": "https://cal/e"})
+        return httpx.Response(
+            200,
+            json={
+                "calendars": {
+                    "primary": {
+                        "busy": [
+                            {
+                                "start": "2026-11-20T10:00:00+05:30",
+                                "end": "2026-11-20T11:00:00+05:30",
+                            }
+                        ]
+                    }
+                }
+            },
+        )
+
+    async def go():
+        http = _google(handler)
+        ev = build_event(title="Review", start="2026-11-20T16:00", attendees="r@example.com")
+        eid = event_id_for("approval-1")
+        assert eid == event_id_for("approval-1") and set(eid) <= set(
+            "0123456789abcdefghijklmnopqrstuvw"
+        )
+        created = await calendar_insert(http, "at", ev, event_id=eid)
+        assert created["htmlLink"] == "https://cal/e"
+        assert calls[-1].url.params["sendUpdates"] == "all"  # attendees are invited
+        solo = build_event(title="Focus time", start="2026-11-20T09:00")
+        await calendar_insert(http, "at", solo, event_id=event_id_for("approval-2"))
+        assert "sendUpdates" not in calls[-1].url.params
+        with pytest.raises(EventExists):
+            await calendar_insert(http, "at", solo, event_id="dup")
+        busy = await calendar_busy(
+            http,
+            "at",
+            time_min="2026-11-20T09:00",
+            time_max="2026-11-20T18:00",
+            timezone="Asia/Kolkata",
+        )
+        assert busy[0]["start"].startswith("2026-11-20T10:00")
+        with pytest.raises(ValueError):
+            await calendar_busy(
+                http,
+                "at",
+                time_min="2026-11-20T18:00",
+                time_max="2026-11-20T09:00",
+                timezone="Asia/Kolkata",
+            )
+
+    asyncio.run(go())

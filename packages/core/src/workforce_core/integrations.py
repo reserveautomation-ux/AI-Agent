@@ -94,7 +94,8 @@ PROVIDERS: tuple[Provider, ...] = (
         "Google Calendar",
         "communication",
         Access.OFFICIAL_API,
-        "Calendar API via Google OAuth.",
+        "Connect in Settings. Sees only free/busy (not meeting details) and creates events "
+        "you approve on calendars you own.",
     ),
     Provider(
         "github",

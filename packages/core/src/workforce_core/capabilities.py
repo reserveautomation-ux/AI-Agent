@@ -80,7 +80,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         "Personal",
         "Schedule meetings",
         "Book a 30-minute call with the design team next Tuesday morning",
-        ("calendar_create_event",),
+        ("calendar_check_availability", "calendar_create_event"),
     ),
     C(
         "whatsapp",

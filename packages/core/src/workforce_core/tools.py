@@ -200,10 +200,47 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "calendar_create_event",
         "communication",
-        "Create a calendar event.",
+        "Add an event to the owner's Google Calendar (and invite attendees). Needs approval.",
         T.EXTERNAL_COMMITMENT,
         "google_calendar",
-        _obj(title=_S, start=_S, end=_S),
+        {
+            "type": "object",
+            "properties": {
+                "title": _S,
+                "start": {
+                    "type": "string",
+                    "description": "Local start date and time, e.g. 2026-11-20T16:00",
+                },
+                "end": {"type": "string", "description": "Local end time (or use duration)"},
+                "duration_minutes": {"type": "integer"},
+                "timezone": {"type": "string", "description": "IANA zone; default: owner's"},
+                "attendees": {
+                    "type": "string",
+                    "description": "Comma-separated emails; they get Google invitations",
+                },
+                "location": _S,
+                "description": _S,
+            },
+            "required": ["title", "start"],
+            "additionalProperties": False,
+        },
+    ),
+    ToolSpec(
+        "calendar_check_availability",
+        "communication",
+        "See when the owner is busy between two times (not what the meetings are).",
+        T.READ,
+        "google_calendar",
+        {
+            "type": "object",
+            "properties": {
+                "time_min": {"type": "string", "description": "e.g. 2026-11-20T09:00"},
+                "time_max": {"type": "string", "description": "e.g. 2026-11-20T19:00"},
+                "timezone": {"type": "string"},
+            },
+            "required": ["time_min", "time_max"],
+            "additionalProperties": False,
+        },
     ),
     ToolSpec(
         "deploy_web",

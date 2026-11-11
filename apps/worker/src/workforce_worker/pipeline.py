@@ -20,7 +20,14 @@ from .agent_loop import AgentError, run_agent
 from .artifacts import csv_stats
 from .browser import BlockedURL, BrowserError, BrowserService
 from .evaluations import refresh_evaluations
-from .executor import ACTION_LABELS, ActionFailed, Integrations, NotConnected, execute_action
+from .executor import (
+    ACTION_LABELS,
+    ActionFailed,
+    Integrations,
+    NotConnected,
+    execute_action,
+    workspace_timezone,
+)
 from .gateway import AgentInfo, StepContext, ToolGateway
 from .llm import LLM, call, json_of
 from .prompts import CHIEF_PLANNER, VERIFIER
@@ -114,6 +121,16 @@ async def load_policy(conn: AsyncConnection, workspace_id: str) -> Policy:
         )
     ).fetchone()
     return Policy.from_row(row["id"], row["version"], row["rules"])
+
+
+async def owner_clock(conn: AsyncConnection, workspace_id: str) -> str:
+    """'Today' for the owner, so agents can resolve 'next Friday' correctly."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    tz = await workspace_timezone(conn, workspace_id)
+    now = datetime.now(ZoneInfo(tz))
+    return f"Now for the owner: {now:%A %d %B %Y, %H:%M} ({tz})."
 
 
 def budget_for(task: Task, policy: Policy) -> float:
@@ -220,6 +237,7 @@ async def plan_task(conn: AsyncConnection, llm: LLM, task: Task, policy: Policy)
         for k, a in roster.items()
     )
     prompt = (
+        f"{await owner_clock(conn, task.workspace_id)}\n\n"
         f"## Owner's instruction\n{task.objective}\n\n"
         f"## Agent roster\n{roster_text}\n\n"
         f"## What you remember about the owner\n{format_for_prompt(memories)}"
@@ -284,7 +302,12 @@ async def plan_task(conn: AsyncConnection, llm: LLM, task: Task, policy: Policy)
 
 
 async def run_steps(
-    conn: AsyncConnection, llm: LLM, task: Task, policy: Policy, browser: BrowserService | None
+    conn: AsyncConnection,
+    llm: LLM,
+    task: Task,
+    policy: Policy,
+    browser: BrowserService | None,
+    integrations: Integrations | None = None,
 ) -> None:
     agents = {a.id: a for a in await active_agents(conn, task.workspace_id)}
     steps = await (
@@ -296,6 +319,7 @@ async def run_steps(
         )
     ).fetchall()
     plan = task.plan or {}
+    clock = await owner_clock(conn, task.workspace_id)
 
     for step in steps:
         if step["status"] in ("succeeded", "skipped"):
@@ -324,6 +348,7 @@ async def run_steps(
         )
         rework = (step["input_json"] or {}).get("rework_feedback")
         context = (
+            f"{clock}\n\n"
             f"## Owner's instruction\n{task.objective}\n\n"
             f"## Plan understanding\n{plan.get('understanding', '')}\n"
             f"Assumptions: {'; '.join(plan.get('assumptions', [])) or 'none'}\n"
@@ -344,7 +369,7 @@ async def run_steps(
             policy=policy,
             budget_usd=budget_for(task, policy),
         )
-        gateway = ToolGateway(conn, ctx, agent, browser)
+        gateway = ToolGateway(conn, ctx, agent, browser, integrations)
         result = await run_agent(llm, conn, gateway, instructions=instructions, context=context)
         result["artifacts"] = ctx.artifacts
         result["approvals"] = ctx.approvals
@@ -652,6 +677,7 @@ async def finalize_approvals(
                     conn=conn,
                     workspace_id=task.workspace_id,
                     integrations=integrations,
+                    key=r["id"],
                 )
                 ok = True
             except NotConnected as exc:
@@ -750,7 +776,7 @@ async def advance(
         await finalize_approvals(conn, task, browser, integrations)
         return (await load_task(conn, task_id)).status
     if task.status == "running":
-        await run_steps(conn, llm, task, policy, browser)
+        await run_steps(conn, llm, task, policy, browser, integrations)
     if task.status == "verifying":
         task = await load_task(conn, task_id)
         await verify_task(conn, llm, task, policy)
