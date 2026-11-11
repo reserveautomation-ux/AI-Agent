@@ -8,7 +8,7 @@ from workforce_core.tools import TOOLS
 
 from .config import Settings, get_settings
 from .deps import ConnDep
-from .routes import tasks, workforce, workspace
+from .routes import memory, tasks, workforce, workspace
 
 
 async def sync_tool_definitions(pool) -> None:
@@ -46,7 +46,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Authorization", "Content-Type", "X-Workspace-Id"],
     )
 
@@ -58,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(workspace.router)
     app.include_router(tasks.router)
     app.include_router(workforce.router)
+    app.include_router(memory.router)
     return app
 
 

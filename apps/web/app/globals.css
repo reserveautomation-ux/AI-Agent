@@ -192,3 +192,13 @@ summary { cursor: pointer; color: var(--muted); margin-bottom: 12px; }
   }
   .cap { scroll-snap-align: start; }
 }
+
+/* Memory */
+input[type="search"] { margin-bottom: 4px; }
+.memory-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.memory {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px;
+}
+.memory-body { flex: 1 1 260px; }
+.memory-body p { margin: 0 0 2px; }

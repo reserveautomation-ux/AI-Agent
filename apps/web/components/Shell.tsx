@@ -10,6 +10,7 @@ import { useSession } from "./AuthProvider";
 const NAV = [
   { href: "/", label: "Command" },
   { href: "/workforce", label: "Workforce" },
+  { href: "/memory", label: "Memory" },
   { href: "/integrations", label: "Integrations" },
   { href: "/audit", label: "Audit" },
 ];

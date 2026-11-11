@@ -249,3 +249,46 @@ def test_capabilities_catalog(client, make_user):
     assert by_key["research"]["handling"] == "automatic"
     assert by_key["cab"]["handling"] == "you_confirm_in_app"
     assert by_key["stock_orders"]["handling"] == "owner_approval"
+
+
+# --- memory -------------------------------------------------------------------
+
+
+def test_memory_api(client, make_user):
+    h = auth(make_user())
+    r = client.post(
+        "/memories",
+        json={"content": "I prefer aisle seats", "memory_type": "preference", "pinned": True},
+        headers=h,
+    )
+    assert r.status_code == 201, r.text
+    mem = r.json()
+    assert mem["trusted"] and mem["pinned"] and mem["source_type"] == "user"
+
+    r = client.post("/memories", json={"content": "my bank OTP is 445566"}, headers=h)
+    assert r.status_code == 422 and "OTP" in r.text
+
+    assert [m["id"] for m in client.get("/memories?q=aisle", headers=h).json()] == [mem["id"]]
+    assert client.get("/memories?q=zebra", headers=h).json() == []
+
+    assert not client.post(f"/memories/{mem['id']}/pin", json={"pinned": False}, headers=h).json()[
+        "pinned"
+    ]
+    assert client.delete(f"/memories/{mem['id']}", headers=h).status_code == 204
+    assert client.get("/memories", headers=h).json() == []
+
+    other = auth(make_user())
+    assert client.delete(f"/memories/{mem['id']}", headers=other).status_code == 404
+
+
+def test_confirming_agent_memory_makes_it_trusted(client, make_user, db):
+    uid = make_user()
+    h = auth(uid)
+    ws = client.get("/me", headers=h).json()["workspace"]["id"]
+    mid = db.execute(
+        "insert into memories (workspace_id, owner_scope, memory_type, content, source_type)"
+        " values (%s, 'workspace', 'fact', 'Office closes at 7pm', 'agent') returning id::text",
+        (ws,),
+    ).fetchone()[0]
+    assert not client.get("/memories", headers=h).json()[0]["trusted"]
+    assert client.post(f"/memories/{mid}/confirm", headers=h).json()["trusted"]

@@ -34,6 +34,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
     throw new ApiError(res.status, detail);
   }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -159,4 +160,21 @@ export interface Capability {
   title: string;
   example: string;
   handling: "automatic" | "asks_approval" | "owner_approval" | "you_confirm_in_app";
+}
+
+export interface Memory {
+  id: string;
+  owner_scope: "workspace" | "agent";
+  agent_id: string | null;
+  agent_name: string | null;
+  memory_type: "preference" | "fact" | "contact" | "instruction" | "learning" | "episode";
+  content: string;
+  trusted: boolean;
+  importance: number;
+  pinned: boolean;
+  source_type: "user" | "agent" | "system";
+  source_ref: string | null;
+  use_count: number;
+  last_used_at: string | null;
+  created_at: string;
 }
