@@ -6,7 +6,7 @@ from workforce_core.db import record_audit, set_actor
 from workforce_core.policy import Policy
 from workforce_core.task_states import TaskStatus, can_transition, is_terminal
 
-from ..auth import UserDep
+from ..auth import CurrentUser, UserDep
 from ..deps import ConnDep
 from ..schemas import (
     ApprovalOut,
@@ -43,8 +43,19 @@ async def _load_policy(conn, workspace_id: str) -> Policy:
     return Policy.from_row(row["id"], row["version"], row["rules"])
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=TaskOut)
-async def create_task(body: TaskCreate, user: UserDep, conn: ConnDep) -> TaskOut:
+class WorkspaceStopped(Exception):
+    pass
+
+
+async def insert_task(
+    conn,
+    user: CurrentUser,
+    body: TaskCreate,
+    *,
+    conversation_id: str | None = None,
+    source: str = "app",
+) -> dict:
+    """Create a task for the workforce (used by the app and by the chat assistant)."""
     async with conn.transaction():
         ws = await (
             await conn.execute(
@@ -53,7 +64,7 @@ async def create_task(body: TaskCreate, user: UserDep, conn: ConnDep) -> TaskOut
             )
         ).fetchone()
         if ws["kill_switch"] or ws["status"] != "active":
-            raise HTTPException(status.HTTP_423_LOCKED, "workspace is stopped (kill switch on)")
+            raise WorkspaceStopped("workspace is stopped (kill switch on)")
 
         policy = await _load_policy(conn, user.workspace_id)
         if (
@@ -71,8 +82,8 @@ async def create_task(body: TaskCreate, user: UserDep, conn: ConnDep) -> TaskOut
             await conn.execute(
                 f"""insert into public.tasks
                         (workspace_id, title, objective, priority, deadline,
-                         budget_limit_usd, created_by)
-                    values (%s, %s, %s, %s, %s, %s, %s)
+                         budget_limit_usd, created_by, conversation_id)
+                    values (%s, %s, %s, %s, %s, %s, %s, %s)
                     returning {TASK_COLUMNS}""",
                 (
                     user.workspace_id,
@@ -82,6 +93,7 @@ async def create_task(body: TaskCreate, user: UserDep, conn: ConnDep) -> TaskOut
                     body.deadline,
                     body.budget_limit_usd,
                     user.user_id,
+                    conversation_id,
                 ),
             )
         ).fetchone()
@@ -93,10 +105,17 @@ async def create_task(body: TaskCreate, user: UserDep, conn: ConnDep) -> TaskOut
             action="task.created",
             target_type="task",
             target_id=row["id"],
-            event={"title": row["title"], "policy_version": policy.version},
+            event={"title": row["title"], "policy_version": policy.version, "source": source},
         )
-    # Week 2: start the durable TaskWorkflow here (after commit) and move the
-    # task draft -> planned -> queued as the planner runs.
+    return row
+
+
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=TaskOut)
+async def create_task(body: TaskCreate, user: UserDep, conn: ConnDep) -> TaskOut:
+    try:
+        row = await insert_task(conn, user, body)
+    except WorkspaceStopped as exc:
+        raise HTTPException(status.HTTP_423_LOCKED, str(exc)) from exc
     return TaskOut(**row)
 
 

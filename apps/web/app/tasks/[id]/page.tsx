@@ -133,7 +133,7 @@ export default function TaskPage() {
   return (
     <>
       <p>
-        <Link href="/">← All tasks</Link>
+        <Link href="/tasks">← All tasks</Link>
       </p>
 
       <div className="card">

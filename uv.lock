@@ -1314,6 +1314,7 @@ name = "workforce-api"
 version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
+    { name = "anthropic" },
     { name = "fastapi" },
     { name = "pydantic-settings" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -1323,6 +1324,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", specifier = ">=0.80" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10" },

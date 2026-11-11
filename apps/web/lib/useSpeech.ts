@@ -61,9 +61,11 @@ interface Options {
   onTranscript: (text: string) => void;
   /** Called once when listening stops, with the final transcript. */
   onDone?: (text: string) => void;
+  /** Keep listening through pauses (dictation). False: stop when the person stops talking. */
+  continuous?: boolean;
 }
 
-export function useSpeech({ lang, onTranscript, onDone }: Options) {
+export function useSpeech({ lang, onTranscript, onDone, continuous = true }: Options) {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export function useSpeech({ lang, onTranscript, onDone }: Options) {
     if (!Ctor || recRef.current) return;
     const rec = new Ctor();
     rec.lang = lang;
-    rec.continuous = true; // keep listening through short pauses
+    rec.continuous = continuous; // dictation keeps listening through short pauses
     rec.interimResults = true; // show words as they are spoken
     textRef.current = "";
     rec.onresult = (e) => {
@@ -103,7 +105,7 @@ export function useSpeech({ lang, onTranscript, onDone }: Options) {
     recRef.current = rec;
     rec.start();
     setListening(true);
-  }, [lang]);
+  }, [lang, continuous]);
 
   const stop = useCallback(() => recRef.current?.stop(), []);
 

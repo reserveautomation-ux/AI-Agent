@@ -64,6 +64,7 @@ Anthropic before you start; you can set a per-task budget in the app.
 | workforce-api | `DATABASE_URL` | Supabase session pooler string |
 | workforce-api | `SUPABASE_URL` | `https://<ref>.supabase.co` |
 | workforce-api | `CORS_ORIGINS` | `["https://workforce-web.onrender.com"]` (your web URL) |
+| workforce-api | `ANTHROPIC_API_KEY` | from console.anthropic.com (the chat assistant) |
 | workforce-worker | `DATABASE_URL` | same as the API |
 | workforce-worker | `ANTHROPIC_API_KEY` | from console.anthropic.com |
 | workforce-web | `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` |
@@ -191,7 +192,9 @@ Slack needs public distribution (step 3). Everything else uses each person's own
 ## Keeping it safe
 
 - Secrets live only in Render and Supabase settings, never in git or the apps.
-- Only the worker holds the Claude key; only the API and worker hold the database string.
+- Only the API (chat) and worker (agents) hold the Claude key and the database string.
+- Chat has a safety cap of $3 of Claude usage per workspace per day (`CHAT_DAILY_BUDGET_USD`)
+  and 20 messages a minute, until billing is added.
 - **Settings → Stop all agents** (or the web's *Stop all*) halts every agent at once.
 - The default budget is $5 per task (change it in the policy or per task).
 - Back up: Supabase → Database → Backups (enable point-in-time recovery on paid plans).
@@ -203,6 +206,7 @@ Slack needs public distribution (step 3). Everything else uses each person's own
 | Web shows "Configuration needed" | Set the `NEXT_PUBLIC_*` variables and redeploy the web service |
 | Web can sign in but every call fails | `CORS_ORIGINS` must contain the exact web URL (with `https://`, no trailing slash) |
 | Tasks stay in *Draft* | Worker not running, or missing `ANTHROPIC_API_KEY`; check the worker logs |
+| Chat says the assistant isn't set up | Set `ANTHROPIC_API_KEY` on **workforce-api** too, redeploy |
 | `prepared statement … does not exist` | Use the session pooler (5432) string |
 | Phone app can't connect | `EXPO_PUBLIC_API_URL` must be the public `https://` API URL |
 | "Gmail isn't set up on the server" | Set the Google variables and `TOKEN_ENCRYPTION_KEY` on the API and worker, redeploy |

@@ -5,13 +5,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from workforce_core.db import make_pool, sync_tool_definitions
 
+from .chat import AnthropicChat, ChatModel
 from .config import Settings, get_settings
 from .deps import ConnDep
-from .routes import approvals, connections, memory, tasks, workforce, workspace
+from .routes import approvals, chat, connections, memory, tasks, workforce, workspace
 
 
-def create_app(settings: Settings | None = None, google_http=None) -> FastAPI:
-    """``google_http``: optional httpx.AsyncClient for Google calls (tests inject a mock)."""
+def create_app(
+    settings: Settings | None = None, google_http=None, chat_model: ChatModel | None = None
+) -> FastAPI:
+    """``google_http``/``chat_model``: test doubles for provider calls and the chat model."""
     settings = settings or get_settings()
 
     @asynccontextmanager
@@ -31,6 +34,9 @@ def create_app(settings: Settings | None = None, google_http=None) -> FastAPI:
 
     app = FastAPI(title="Workforce OS API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
+    app.state.chat_model = chat_model or (
+        AnthropicChat(settings.anthropic_api_key) if settings.anthropic_api_key else None
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -51,6 +57,7 @@ def create_app(settings: Settings | None = None, google_http=None) -> FastAPI:
     app.include_router(approvals.router)
     app.include_router(connections.router)
     app.include_router(connections.catalog_router)
+    app.include_router(chat.router)
     return app
 
 

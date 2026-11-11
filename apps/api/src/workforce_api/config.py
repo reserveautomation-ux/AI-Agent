@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     oauth_redirect_uri: str | None = None
     slack_client_id: str | None = None
     slack_client_secret: str | None = None
+    # Chat assistant (Claude). Without a key, chat explains it isn't set up yet.
+    anthropic_api_key: str | None = None
+    chat_model: str = "claude-opus-5-5"
+    chat_effort: str = "low"  # quick replies; real work goes to the workforce
+    # Safety net until billing exists: max chat spend per workspace per day.
+    chat_daily_budget_usd: float = 3.0
+    chat_messages_per_minute: int = 20
     # base64 of 32 random bytes; the worker needs the same value.
     token_encryption_key: str | None = None
     # Where the OAuth callback may send the owner back to, besides cors_origins.

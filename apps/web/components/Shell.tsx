@@ -8,7 +8,8 @@ import { supabase } from "@/lib/supabase";
 import { useSession } from "./AuthProvider";
 
 const NAV = [
-  { href: "/", label: "Command" },
+  { href: "/", label: "Chat" },
+  { href: "/tasks", label: "Tasks" },
   { href: "/approvals", label: "Approvals" },
   { href: "/workforce", label: "Workforce" },
   { href: "/memory", label: "Memory" },
@@ -58,7 +59,7 @@ export function Shell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <>
+    <div className={pathname === "/" ? "shell-chat" : undefined}>
       <header className="topbar">
         <Link href="/" className="brand">
           Workforce OS
@@ -94,7 +95,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="banner">Kill switch is on. Agents are stopped and new tasks are blocked.</div>
       )}
       {error && <div className="banner error">{error}</div>}
-      <main className="container">{children}</main>
-    </>
+      <main className={pathname === "/" ? "chat-page" : "container"}>{children}</main>
+    </div>
   );
 }

@@ -19,6 +19,8 @@ services:
         sync: false
       - key: CORS_ORIGINS # JSON list with your web app URL, e.g. ["https://workforce-web.onrender.com"]
         sync: false
+      - key: ANTHROPIC_API_KEY # chat assistant replies (same key as the worker)
+        sync: false
       # Gmail + Google Calendar (optional until you connect them; see docs/DEPLOY.md step 5)
       - key: GOOGLE_CLIENT_ID
         sync: false
