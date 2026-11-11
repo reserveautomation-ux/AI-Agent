@@ -21,7 +21,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AssistantSettings, DEFAULT_VOICE, type VoicePrefs } from '@/components/AssistantSettings';
-import { ChatText, speakable } from '@/components/ChatText';
+import { ChatText } from '@/components/ChatText';
 import { Icon, type IconName } from '@/components/ui';
 import {
   ApiError,
@@ -35,6 +35,7 @@ import {
 } from '@/lib/api';
 import { confirmAsync } from '@/lib/confirm';
 import { joinNames, serviceName } from '@/lib/labels';
+import { Speaker, phoneVoices } from '@/lib/speaker';
 import { FONTS, usePaper } from '@/lib/theme';
 import { VOICE_LANGUAGES, useVoice } from '@/lib/useVoice';
 
@@ -137,33 +138,16 @@ export default function ChatScreen() {
   );
 
   // --- the assistant's voice ------------------------------------------------------
-  const stopSpeaking = useCallback(() => {
-    Speech.stop();
-    setSpeakingId(null);
-  }, []);
+  // The assistant's voice: speaks sentence by sentence, even while a reply is still arriving.
+  const [speaker] = useState(() => new Speaker((id) => setSpeakingId(id)));
+  useEffect(() => {
+    void phoneVoices();
+    return () => speaker.stop();
+  }, [speaker]);
+  const stopSpeaking = useCallback(() => speaker.stop(), [speaker]);
   const speak = useCallback(
-    (text: string, id: string, onEnd?: () => void) => {
-      const clean = speakable(text);
-      Speech.stop();
-      if (!clean) return onEnd?.();
-      setSpeakingId(id);
-      Speech.speak(clean, {
-        language: lang,
-        voice: voicePrefs.voice || undefined,
-        rate: voicePrefs.rate,
-        pitch: voicePrefs.pitch,
-        onDone: () => {
-          setSpeakingId(null);
-          onEnd?.();
-        },
-        onStopped: () => setSpeakingId(null),
-        onError: () => {
-          setSpeakingId(null);
-          onEnd?.();
-        },
-      });
-    },
-    [lang, voicePrefs],
+    (text: string, id: string, onEnd?: () => void) => speaker.speak(text, id, lang, voicePrefs, onEnd),
+    [speaker, lang, voicePrefs],
   );
 
   const openConversation = useCallback(async (id: string | null) => {
@@ -210,7 +194,7 @@ export default function ChatScreen() {
   }, [activeId, busy, streaming, readAloud, speak]);
 
   const send = useCallback(
-    async (text: string, via: 'text' | 'voice' = 'text'): Promise<string> => {
+    async (text: string, via: 'text' | 'voice' = 'text', onDelta?: (t: string) => void): Promise<string> => {
       const content = text.trim();
       if (!content || streaming) return '';
       setError(null);
@@ -244,6 +228,7 @@ export default function ChatScreen() {
               ]);
             } else if (e.type === 'text') {
               reply += e.text;
+              onDelta?.(e.text);
               patch((m) => ({ ...m, content: m.content + e.text }));
             } else if (e.type === 'task') {
               setTasks((t) => ({ ...t, [e.task.id]: e.task }));
@@ -273,10 +258,41 @@ export default function ChatScreen() {
     [streaming, stopSpeaking],
   );
 
+  /** Send, and (in voice mode or with read-aloud on) speak the reply while it streams in. */
+  const sendSpoken = async (text: string, via: 'text' | 'voice', onSpoken?: () => void): Promise<string> => {
+    const talk = via === 'voice' || readAloud;
+    const id = via === 'voice' ? 'voice' : 'last';
+    let begun = false;
+    const reply = await send(
+      text,
+      via,
+      talk
+        ? (t) => {
+            if (!begun) {
+              begun = true;
+              speaker.begin(id, lang, voicePrefs, onSpoken);
+              if (via === 'voice') setVoiceBoth('speaking');
+            }
+            speaker.push(t);
+          }
+        : undefined,
+    );
+    if (!talk) return reply;
+    if (!reply) {
+      if (begun) speaker.stop();
+      return reply;
+    }
+    if (begun) speaker.end();
+    else {
+      if (via === 'voice') setVoiceBoth('speaking');
+      speak(reply, id, onSpoken);
+    }
+    return reply;
+  };
+
   const sendTyped = async () => {
     if (mic.listening) mic.stop();
-    const reply = await send(input);
-    if (reply && readAloud) speak(reply, 'last');
+    await sendSpoken(input, 'text');
   };
 
   // One recognizer for both dictation and voice conversation.
@@ -299,13 +315,12 @@ export default function ChatScreen() {
     if (voiceRef.current !== 'listening') return;
     if (!said.trim()) return setVoiceBoth('paused');
     setVoiceBoth('thinking');
-    const reply = await send(said, 'voice');
-    if ((voiceRef.current as VoiceState) === 'off') return;
-    if (!reply) return setVoiceBoth('paused');
-    setVoiceBoth('speaking');
-    speak(reply, 'voice', () => {
+    // Starts talking at the first full sentence, like a person would.
+    const reply = await sendSpoken(said, 'voice', () => {
       if (voiceRef.current === 'speaking') listen();
     });
+    if ((voiceRef.current as VoiceState) === 'off') return speaker.stop();
+    if (!reply) setVoiceBoth('paused');
   };
   const startVoice = () => {
     if (mic.listening) mic.stop();

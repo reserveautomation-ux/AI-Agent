@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { post } from "@/lib/api";
-import { useSpeak, useVoiceList, voicesFor, type VoicePrefs } from "@/lib/useSpeak";
+import { isNatural, useSpeak, useVoiceList, voicesFor, type VoicePrefs } from "@/lib/useSpeak";
 import { VOICE_LANGUAGES } from "@/lib/useSpeech";
 
 const NAME_IDEAS = ["Maya", "Aria", "Jarvis", "Kabir", "Ira", "Nova"];
@@ -95,10 +95,11 @@ export function AssistantSettings({
         <label className="field">
           <span className="mono-label">Voice</span>
           <select value={draft.voiceURI} onChange={(e) => setDraft((d) => ({ ...d, voiceURI: e.target.value }))}>
-            <option value="">Automatic (best for this language)</option>
+            <option value="">{voices[0] ? `Automatic: most natural (${voices[0].name})` : "Automatic (best for this language)"}</option>
             {voices.map((v) => (
               <option key={v.voiceURI} value={v.voiceURI}>
                 {v.name} · {v.lang}
+                {isNatural(v) ? " · natural" : ""}
               </option>
             ))}
           </select>
@@ -119,9 +120,9 @@ export function AssistantSettings({
         </div>
 
         <p className="hint">
-          Voices come from this device, so each phone or computer can sound different. More natural
-          voices can be added in your device&apos;s settings (iPhone: Settings › Accessibility ›
-          Spoken Content › Voices; Android: Settings › Text-to-speech).
+          Free voices from this device; ones marked “natural” sound the most human. Microsoft Edge and
+          Chrome include natural voices; on a phone, download better ones for free in Settings
+          (iPhone: Accessibility › Spoken Content › Voices; Android: Text-to-speech).
         </p>
         {error && <p className="chat-error">{error}</p>}
 

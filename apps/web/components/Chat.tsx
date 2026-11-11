@@ -151,7 +151,7 @@ export function Chat() {
   }, [activeId, busyTasks, streaming, readAloud, lang, speak]);
 
   const send = useCallback(
-    async (text: string, via: "text" | "voice" = "text"): Promise<string> => {
+    async (text: string, via: "text" | "voice" = "text", onDelta?: (t: string) => void): Promise<string> => {
       const content = text.trim();
       if (!content || streaming) return "";
       setError(null);
@@ -185,6 +185,7 @@ export function Chat() {
               ]);
             } else if (e.type === "text") {
               reply += e.text;
+              onDelta?.(e.text);
               patch((m) => ({ ...m, content: m.content + e.text }));
             } else if (e.type === "task") {
               setTasks((t) => ({ ...t, [e.task.id]: e.task }));
@@ -214,6 +215,37 @@ export function Chat() {
     [streaming, stopSpeaking],
   );
 
+  /** Send, and (in voice mode or with read-aloud on) speak the reply while it streams in. */
+  const sendSpoken = async (text: string, via: "text" | "voice", onSpoken?: () => void): Promise<string> => {
+    const talk = via === "voice" || readAloud;
+    let begun = false;
+    const reply = await send(
+      text,
+      via,
+      talk
+        ? (t) => {
+            if (!begun) {
+              begun = true;
+              tts.begin(via === "voice" ? "voice" : "last", lang, onSpoken);
+              if (via === "voice") setVoice("speaking");
+            }
+            tts.push(t);
+          }
+        : undefined,
+    );
+    if (!talk) return reply;
+    if (!reply) {
+      if (begun) tts.stop();
+      return reply;
+    }
+    if (begun) tts.end();
+    else {
+      if (via === "voice") setVoice("speaking");
+      tts.speak(reply, lang, via === "voice" ? "voice" : "last", onSpoken);
+    }
+    return reply;
+  };
+
   // --- typing + dictation ---------------------------------------------------------
   const dictation = useSpeech({
     lang,
@@ -229,7 +261,7 @@ export function Chat() {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       if (dictation.listening) dictation.stop();
-      void send(input).then((r) => readAloud && r && tts.speak(r, lang, "last"));
+      void sendSpoken(input, "text");
     }
   };
 
@@ -246,16 +278,12 @@ export function Chat() {
         return;
       }
       setVoice("thinking");
-      const reply = await send(said, "voice");
-      if ((voiceRef.current as VoiceState) === "off") return;
-      if (!reply) {
-        setVoice("paused");
-        return;
-      }
-      setVoice("speaking");
-      tts.speak(reply, lang, "voice", () => {
+      // Starts talking at the first full sentence, like a person would.
+      const reply = await sendSpoken(said, "voice", () => {
         if (voiceRef.current === "speaking") listenRef.current();
       });
+      if ((voiceRef.current as VoiceState) === "off") return tts.stop();
+      if (!reply) setVoice("paused");
     },
   });
   listenRef.current = () => {
@@ -481,7 +509,7 @@ export function Chat() {
                 className="send-btn active"
                 onClick={() => {
                   if (dictation.listening) dictation.stop();
-                  void send(input).then((r) => readAloud && r && tts.speak(r, lang, "last"));
+                  void sendSpoken(input, "text");
                 }}
                 aria-label="Send"
               >

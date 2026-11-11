@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, Tex
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { post } from '@/lib/api';
+import { isNatural, phoneVoices, voicesFor } from '@/lib/speaker';
 import { FONTS, usePaper } from '@/lib/theme';
 import { VOICE_LANGUAGES } from '@/lib/useVoice';
 
@@ -55,20 +56,10 @@ export function AssistantSettings({
 
   useEffect(() => {
     if (!open) return;
-    Speech.getAvailableVoicesAsync()
-      .then(setVoices)
-      .catch(() => setVoices([]));
+    void phoneVoices().then(setVoices);
   }, [open]);
 
-  const base = draftLang.split('-')[0];
-  const matching = voices
-    .filter((v) => v.language.replace('_', '-').startsWith(base))
-    .sort(
-      (a, b) =>
-        Number(b.language.replace('_', '-') === draftLang) - Number(a.language.replace('_', '-') === draftLang) ||
-        Number(b.quality === Speech.VoiceQuality.Enhanced) - Number(a.quality === Speech.VoiceQuality.Enhanced) ||
-        a.name.localeCompare(b.name),
-    );
+  const matching = voicesFor(voices, draftLang);
   const chosen = voices.find((v) => v.identifier === draft.voice);
   const shownName = draftName.trim() || 'AI Assistant';
   const sample = draftLang.startsWith('hi')
@@ -178,7 +169,9 @@ export function AssistantSettings({
 
             <Mono>Voice</Mono>
             <Pressable onPress={() => setPicker(picker === 'voice' ? null : 'voice')} accessibilityRole="button" style={box}>
-              <Text style={body}>{chosen ? `${chosen.name} · ${chosen.language}` : 'Automatic (phone default)'}</Text>
+              <Text style={body}>
+                {chosen ? `${chosen.name} · ${chosen.language}` : matching[0] ? `Automatic: most natural (${matching[0].name})` : 'Automatic (phone default)'}
+              </Text>
             </Pressable>
             {picker === 'voice' && (
               <View style={{ gap: 2 }}>
@@ -193,7 +186,7 @@ export function AssistantSettings({
                     <Text style={[body, v.identifier === draft.voice && { fontFamily: FONTS.sansBold }]}>
                       {v.name}
                       {v.language ? ` · ${v.language}` : ''}
-                      {v.quality === Speech.VoiceQuality.Enhanced ? ' · enhanced' : ''}
+                      {v.identifier && isNatural(v) ? ' · natural' : ''}
                     </Text>
                   </Pressable>
                 ))}
@@ -209,8 +202,8 @@ export function AssistantSettings({
             </View>
 
             <Text style={[body, { color: p.muted, fontSize: 14, lineHeight: 20 }]}>
-              Voices come from this phone. Add more natural ones in Settings ›{' '}
-              {Platform.OS === 'ios' ? 'Accessibility › Spoken Content › Voices' : 'Text-to-speech'}.
+              Free voices from this phone; ones marked “natural” sound the most human. Download better ones for free in
+              Settings › {Platform.OS === 'ios' ? 'Accessibility › Spoken Content › Voices (choose an Enhanced or Premium voice)' : 'Text-to-speech'}.
             </Text>
             {!!error && <Text style={{ color: p.bad, fontFamily: FONTS.sans }}>{error}</Text>}
 
