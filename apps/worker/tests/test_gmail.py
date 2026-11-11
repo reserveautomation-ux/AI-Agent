@@ -124,11 +124,25 @@ def test_approved_email_is_sent_from_gmail(database_url, db, workspace):
     assert len(google.sent) == 1
 
 
-def test_revoked_access_marks_connection_expired(database_url, db, workspace):
+def _waiting(db, task):
+    return db.execute(
+        "select status::text, waiting_for_connection from tasks where id = %s", (task,)
+    ).fetchone()
+
+
+def _resume(database_url, task, google):
+    return run(
+        database_url,
+        lambda c: advance(c, FakeLLM(None, None, None), task, integrations=_integrations(google)),
+    )
+
+
+def test_revoked_access_waits_for_reconnect(database_url, db, workspace):
     _connect_gmail(database_url, workspace.id)
     task = _prepared_email_task(database_url, db, workspace)
     google = FakeGoogle(refresh="revoked")
-    assert _approve_and_run(database_url, db, task, _integrations(google)) == "failed"
+    assert _approve_and_run(database_url, db, task, _integrations(google)) == "blocked"
+    assert _waiting(db, task)[1] == ["gmail"]
     assert "Reconnect Gmail" in _summary(db, task)[1] and google.sent == []
     assert (
         db.execute(
@@ -137,6 +151,20 @@ def test_revoked_access_marks_connection_expired(database_url, db, workspace):
         ).fetchone()[0]
         == "expired"
     )
+    # The approval was put back, not used up.
+    assert (
+        db.execute(
+            "select status::text from approval_requests where task_id = %s", (task,)
+        ).fetchone()[0]
+        == "approved"
+    )
+
+    # Reconnecting wakes the task and the email goes out once.
+    db.execute("delete from tool_connections where workspace_id = %s", (workspace.id,))
+    _connect_gmail(database_url, workspace.id)
+    db.execute("select wake_tasks_for_connection(%s, 'gmail')", (workspace.id,))
+    google = FakeGoogle()
+    assert _resume(database_url, task, google) == "completed" and len(google.sent) == 1
 
 
 def test_gmail_error_is_reported(database_url, db, workspace):
@@ -149,11 +177,24 @@ def test_gmail_error_is_reported(database_url, db, workspace):
     assert "Gmail refused to send: Invalid To header" in _summary(db, task)[1]
 
 
-def test_without_a_connection_nothing_is_sent(database_url, db, workspace):
+def test_without_a_connection_it_waits_then_sends(database_url, db, workspace):
     task = _prepared_email_task(database_url, db, workspace)
     google = FakeGoogle()
-    assert _approve_and_run(database_url, db, task, _integrations(google)) == "failed"
-    assert "Gmail isn't connected yet" in _summary(db, task)[1] and google.sent == []
+    assert _approve_and_run(database_url, db, task, _integrations(google)) == "blocked"
+    assert _waiting(db, task) == ("blocked", ["gmail"]) and google.sent == []
+    assert "connect Gmail in Connections" in _summary(db, task)[1]
+    # Running again before connecting changes nothing.
+    assert _resume(database_url, task, google) == "blocked" and google.sent == []
+
+    _connect_gmail(database_url, workspace.id)
+    assert (
+        db.execute("select wake_tasks_for_connection(%s, 'gmail')", (workspace.id,)).fetchone()[0]
+        == 1
+    )
+    assert _waiting(db, task) == ("running", [])
+    assert _resume(database_url, task, google) == "completed"
+    assert len(google.sent) == 1 and google.sent[0]["To"] == "rahul@example.com"
+    assert _resume(database_url, task, google) == "completed" and len(google.sent) == 1
 
 
 def test_draft_email_is_saved_as_a_file(database_url, db, workspace):

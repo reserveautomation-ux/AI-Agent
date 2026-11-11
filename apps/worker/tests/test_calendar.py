@@ -169,17 +169,68 @@ def test_event_already_on_calendar_is_not_an_error(database_url, db, workspace):
     assert "was already on your calendar" in _summary(db, task)[1]
 
 
-def test_without_calendar_the_agent_is_told_honestly(database_url, db, workspace):
-    task, status, seen = _scheduling_task(database_url, db, workspace, _integ(FakeCalendar()))
+def _wake(db, ws_id, key):
+    return db.execute("select wake_tasks_for_connection(%s, %s)", (ws_id, key)).fetchone()[0]
+
+
+def test_without_calendar_the_task_waits_and_resumes_once_connected(database_url, db, workspace):
+    fake = FakeCalendar()
+    task, status, seen = _scheduling_task(database_url, db, workspace, _integ(fake))
     assert "Google Calendar isn't connected yet" in seen["availability"]
-    _decide(db, task, "approved")
+    assert status == "blocked"
+    row = db.execute(
+        "select waiting_for_connection, result_summary from tasks where id = %s", (task,)
+    ).fetchone()
+    assert row[0] == ["google_calendar"] and "connect Google Calendar" in row[1]
+    # Nothing prepared in the half-finished step is left waiting for approval.
+    assert (
+        db.execute(
+            "select count(*) from approval_requests where task_id = %s and status = 'pending'",
+            (task,),
+        ).fetchone()[0]
+        == 0
+    )
+
+    # The owner connects Google Calendar: the task wakes up and redoes the step.
+    _connect_calendar(database_url, workspace.id)
+    assert _wake(db, workspace.id, "google_calendar") == 1
+    task2, status2, seen2 = task, *_resume_scheduling(database_url, task, _integ(fake))
+    assert status2 == "waiting_for_approval"
+    assert "busy Fri 20 Nov, 10:00–12:00" in seen2["availability"]
+    _decide(db, task2, "approved")
     assert (
         run(
             database_url,
-            lambda c: advance(
-                c, FakeLLM(None, None, None), task, integrations=_integ(FakeCalendar())
-            ),
+            lambda c: advance(c, FakeLLM(None, None, None), task2, integrations=_integ(fake)),
         )
-        == "failed"
+        == "completed"
     )
-    assert "Connect Google Calendar in Settings" in _summary(db, task)[1]
+    assert len(fake.created) == 1
+
+
+def _resume_scheduling(database_url, task, integ):
+    seen = {}
+
+    def step(p, n):
+        turns = tool_turns(p)
+        if turns == 0:
+            return tool_resp(
+                (
+                    "calendar_check_availability",
+                    {"time_min": "2026-11-20T09:00", "time_max": "2026-11-20T19:00"},
+                )
+            )
+        if turns == 1:
+            seen["availability"] = str(p["messages"][-1]["content"])
+            return tool_resp(("calendar_create_event", EVENT))
+        return text_resp(step_result("Prepared the meeting", approvals=["Design review"]))
+
+    llm = FakeLLM(None, step, lambda p, n: text_resp(verdict()))
+    return run(database_url, lambda c: advance(c, llm, task, integrations=integ)), seen
+
+
+def test_calendar_cannot_be_connected_on_this_server_fails_honestly(database_url, db, workspace):
+    # No encryption key on the server: connecting can't help, so say so instead of waiting.
+    task, status, seen = _scheduling_task(database_url, db, workspace, Integrations())
+    assert status != "blocked"
+    assert "isn't set up on the server" in seen["availability"]

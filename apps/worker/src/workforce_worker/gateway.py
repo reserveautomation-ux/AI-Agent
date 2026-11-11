@@ -64,6 +64,8 @@ class StepContext:
     budget_usd: float
     artifacts: list[dict] = field(default_factory=list)
     approvals: list[str] = field(default_factory=list)
+    # Services the agent needed but the owner hasn't connected yet.
+    needs_connections: set[str] = field(default_factory=set)
 
 
 class ToolGateway:
@@ -324,7 +326,13 @@ class ToolGateway:
                 return await check_availability(
                     self.conn, self.ctx.workspace_id, args, self.integrations
                 )
-            except (NotConnected, ActionFailed) as exc:
+            except NotConnected as exc:
+                if exc.fixable and exc.connector:
+                    self.ctx.needs_connections.add(exc.connector)
+                raise NotImplementedError(
+                    f"{exc} The owner will be asked to connect it; finish what you can."
+                ) from exc
+            except ActionFailed as exc:
                 raise NotImplementedError(str(exc)) from exc
 
         if name == "draft_email":

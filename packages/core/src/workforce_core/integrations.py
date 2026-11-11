@@ -82,6 +82,20 @@ PROVIDERS: tuple[Provider, ...] = (
         "Each network needs its own app approval.",
     ),
     Provider(
+        "telegram",
+        "Telegram",
+        "communication",
+        Access.OFFICIAL_API,
+        "Bot API with the owner's own bot token; people must start a chat with the bot first.",
+    ),
+    Provider(
+        "slack",
+        "Slack",
+        "communication",
+        Access.OFFICIAL_API,
+        "Sign in with Slack; posts approved messages to channels.",
+    ),
+    Provider(
         "gmail",
         "Gmail",
         "communication",

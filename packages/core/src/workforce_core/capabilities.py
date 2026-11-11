@@ -90,6 +90,13 @@ CAPABILITIES: tuple[Capability, ...] = (
         ("send_whatsapp",),
     ),
     C(
+        "team_message",
+        "Personal",
+        "Message your team on Slack or Telegram",
+        "Post on #general that the office is closed tomorrow",
+        ("post_slack", "send_telegram"),
+    ),
+    C(
         "remind",
         "Personal",
         "Reminders and follow-ups",
@@ -182,14 +189,14 @@ CAPABILITIES: tuple[Capability, ...] = (
         "Build",
         "Build and launch a website",
         "Build a landing page for my bakery with a menu and WhatsApp order button",
-        ("git_commit_push", "deploy_web"),
+        ("create_document", "github_save_files", "deploy_web"),
     ),
     C(
         "mobile_app",
         "Build",
         "Build and publish a mobile app",
         "Make a simple habit-tracker app and publish it on Play Store and App Store",
-        ("git_commit_push", "play_store_release", "app_store_submit"),
+        ("create_document", "github_save_files", "play_store_release", "app_store_submit"),
     ),
     # Content
     C(

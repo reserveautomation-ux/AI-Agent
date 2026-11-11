@@ -44,7 +44,8 @@ def _prepared_email_task(database_url, db, workspace):
 def _decide(db, task, decision):
     """What the approval API does, then what expire_approvals() does for the worker."""
     db.execute(
-        "update approval_requests set status = %s, decided_at = now() where task_id = %s",
+        "update approval_requests set status = %s, decided_at = now()"
+        " where task_id = %s and status = 'pending'",
         (decision, task),
     )
     db.execute("select public.expire_approvals()")

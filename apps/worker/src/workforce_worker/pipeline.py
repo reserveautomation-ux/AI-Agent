@@ -12,6 +12,7 @@ from typing import Any
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 from workforce_core.approvals import ApprovalError, binding_from_row, check_approval
+from workforce_core.connectors import CONNECTORS_BY_KEY
 from workforce_core.db import record_audit, set_actor
 from workforce_core.memory import format_for_prompt, recall, remember
 from workforce_core.policy import Policy
@@ -25,7 +26,10 @@ from .executor import (
     ActionFailed,
     Integrations,
     NotConnected,
+    can_connect,
     execute_action,
+    is_connected,
+    needs_connection,
     workspace_timezone,
 )
 from .gateway import AgentInfo, StepContext, ToolGateway
@@ -89,7 +93,11 @@ async def transition(
         await set_actor(conn, "worker", None, reason)
         if fields:
             cols = ", ".join(f"{k} = %s" for k in fields)
-            vals = [Jsonb(v) if isinstance(v, dict | list) else v for v in fields.values()]
+            text_arrays = {"waiting_for_connection"}  # plain text[] columns, not JSON
+            vals = [
+                Jsonb(v) if isinstance(v, dict | list) and k not in text_arrays else v
+                for k, v in fields.items()
+            ]
             await conn.execute(f"update public.tasks set {cols} where id = %s", (*vals, task.id))
         for target in targets:
             await conn.execute(
@@ -371,6 +379,9 @@ async def run_steps(
         )
         gateway = ToolGateway(conn, ctx, agent, browser, integrations)
         result = await run_agent(llm, conn, gateway, instructions=instructions, context=context)
+        if ctx.needs_connections:
+            await wait_for_connections(conn, task, step["id"], ctx)
+            return
         result["artifacts"] = ctx.artifacts
         result["approvals"] = ctx.approvals
         await conn.execute(
@@ -381,6 +392,36 @@ async def run_steps(
         step["status"], step["output_json"] = "succeeded", result
 
     await transition(conn, task, "verifying", reason="all steps finished")
+
+
+def _names(keys) -> str:
+    return " and ".join(CONNECTORS_BY_KEY[k].name if k in CONNECTORS_BY_KEY else k for k in keys)
+
+
+async def wait_for_connections(
+    conn: AsyncConnection, task: Task, step_id: str, ctx: StepContext
+) -> None:
+    """Pause until the owner connects what this step needs; then redo the step."""
+    keys = sorted(ctx.needs_connections)
+    async with conn.transaction():
+        await conn.execute(
+            "update public.task_steps set status = 'pending' where id = %s", (step_id,)
+        )
+        # The step will run again, so withdraw anything it prepared for approval.
+        await conn.execute(
+            "update public.approval_requests set status = 'invalidated', decided_at = now()"
+            " where task_id = %s and status = 'pending' and id = any(%s::uuid[])",
+            (task.id, ctx.approvals),
+        )
+    await transition(
+        conn,
+        task,
+        "blocked",
+        reason=f"needs {', '.join(keys)}",
+        waiting_for_connection=keys,
+        result_summary=f"To continue, connect {_names(keys)} in Connections. "
+        "I'll pick up from here automatically.",
+    )
 
 
 def _replacement(agents: dict[str, AgentInfo], step: dict) -> AgentInfo | None:
@@ -617,6 +658,30 @@ async def finalize_approvals(
             (task.id,),
         )
     ).fetchall()
+    # Connect-when-needed: if an approved action's service isn't connected, wait for it
+    # (nothing is used up) and carry on automatically once it's connected.
+    missing = sorted(
+        {
+            key
+            for r in rows
+            if r["status"] == "approved"
+            and (key := needs_connection(r["action"]))
+            and can_connect(key, integrations or Integrations())
+            and not await is_connected(conn, task.workspace_id, key)
+        }
+    )
+    if missing:
+        await transition(
+            conn,
+            task,
+            "blocked",
+            reason=f"needs {', '.join(missing)}",
+            waiting_for_connection=missing,
+            result_summary=f"Approved. To carry it out, connect {_names(missing)} in "
+            "Connections; it then happens automatically.",
+        )
+        return
+
     lines: list[str] = []
     failures = 0
 
@@ -678,9 +743,31 @@ async def finalize_approvals(
                     workspace_id=task.workspace_id,
                     integrations=integrations,
                     key=r["id"],
+                    task_id=task.id,
                 )
                 ok = True
             except NotConnected as exc:
+                if exc.fixable and exc.connector:
+                    # Nothing reached the provider: put the approval back and wait.
+                    await conn.execute(
+                        "update public.approval_requests set status = 'approved' where id = %s",
+                        (r["id"],),
+                    )
+                    if r["inv_id"]:
+                        await conn.execute(
+                            "update public.tool_invocations set status = 'awaiting_approval'"
+                            " where id = %s",
+                            (r["inv_id"],),
+                        )
+                    await transition(
+                        conn,
+                        task,
+                        "blocked",
+                        reason=f"needs {exc.connector}",
+                        waiting_for_connection=[exc.connector],
+                        result_summary=str(exc),
+                    )
+                    return
                 text, ok = str(exc), False
             except (ActionFailed, BrowserError, BlockedURL, ValueError, KeyError) as exc:
                 text, ok = f"Couldn't do it: {exc}", False

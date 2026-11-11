@@ -50,6 +50,7 @@ def create_app(settings: Settings | None = None, google_http=None) -> FastAPI:
     app.include_router(memory.router)
     app.include_router(approvals.router)
     app.include_router(connections.router)
+    app.include_router(connections.catalog_router)
     return app
 
 

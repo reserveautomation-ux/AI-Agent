@@ -124,8 +124,8 @@ _AGENT_DEFS: tuple[AgentTemplate, ...] = (
         "Messaging Agent",
         "specialist",
         "personal_executive",
-        "Writes and (with approval) sends WhatsApp messages.",
-        ("send_whatsapp", "recall"),
+        "Writes and (with approval) sends WhatsApp, Telegram and Slack messages.",
+        ("send_whatsapp", "send_telegram", "post_slack", "recall"),
     ),
     # Research
     A(
@@ -228,8 +228,8 @@ _AGENT_DEFS: tuple[AgentTemplate, ...] = (
         "Engineer Agent",
         "specialist",
         "software",
-        "Writes code, tests and pull requests.",
-        ("git_commit_push", "web_fetch", "run_code"),
+        "Builds websites and code (HTML, CSS, JavaScript) and saves them to GitHub.",
+        ("create_document", "github_save_files", "web_fetch", "run_code"),
     ),
     A(
         "sw_release",

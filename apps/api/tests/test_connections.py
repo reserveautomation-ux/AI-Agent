@@ -45,6 +45,26 @@ class FakeGoogle:
             )
         if req.url.path == "/v1/userinfo":
             return httpx.Response(200, json={"sub": "1098765", "email": "asha@gmail.com"})
+        if req.url.host == "slack.com" and req.url.path == "/api/oauth.v2.access":
+            form = {k: v[0] for k, v in parse_qs(req.content.decode()).items()}
+            if form["code"] == "slack-denied":
+                return httpx.Response(200, json={"ok": False, "error": "invalid_code"})
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "access_token": "xoxb-1",
+                    "token_type": "bot",
+                    "scope": "chat:write,channels:read",
+                    "team": {"id": "T1", "name": "Asha Studio"},
+                },
+            )
+        if req.url.host == "api.telegram.org":
+            if "bad-token" in req.url.path:
+                return httpx.Response(401, json={"ok": False, "description": "Unauthorized"})
+            return httpx.Response(
+                200, json={"ok": True, "result": {"id": 42, "username": "asha_bot"}}
+            )
         if req.url.path == "/revoke":
             self.revoked.append(parse_qs(req.content.decode())["token"][0])
             return httpx.Response(200)
@@ -66,6 +86,9 @@ def gclient(database_url, google):
         google_client_id="cid",
         google_client_secret="csecret",
         google_redirect_uri="https://api.example.com/connections/gmail/callback",
+        oauth_redirect_uri="https://api.example.com/connections/oauth/callback",
+        slack_client_id="slack-cid",
+        slack_client_secret="slack-secret",
         token_encryption_key=KEY,
     )
     http = httpx.AsyncClient(transport=httpx.MockTransport(google))
@@ -211,6 +234,80 @@ def test_connect_calendar_separately(gclient, make_user):
     r = _callback(gclient, state, code="good")  # granted gmail.send only, not calendar
     assert r.headers["location"].endswith("status=missing_permission")
     assert (
-        gclient.post("/connections/slack/start", json={"redirect_to": WEB}, headers=h).status_code
+        gclient.post("/connections/myspace/start", json={"redirect_to": WEB}, headers=h).status_code
         == 404
+    )
+
+
+def test_catalog_lists_every_service_honestly(gclient, make_user):
+    items = {c["key"]: c for c in gclient.get("/connectors", headers=auth(make_user())).json()}
+    assert items["gmail"]["auth"] == "oauth2" and items["gmail"]["available"]
+    assert (
+        items["telegram"]["auth"] == "api_key"
+        and items["telegram"]["fields"][0]["key"] == "bot_token"
+    )
+    assert items["swiggy"]["auth"] == "deep_link" and items["swiggy"]["open_url"]
+    assert items["notion"]["live"] is False and items["notion"]["available"] is False
+    assert items["browser"]["auth"] == "builtin"
+    assert all(not f.get("value") for c in items.values() for f in c["fields"])  # no secrets
+
+
+def test_connect_slack_by_signing_in(gclient, make_user):
+    h = auth(make_user())
+    r = gclient.post("/connections/slack/start", json={"redirect_to": WEB}, headers=h)
+    q = {k: v[0] for k, v in parse_qs(urlsplit(r.json()["auth_url"]).query).items()}
+    assert urlsplit(r.json()["auth_url"]).netloc == "slack.com"
+    assert q["scope"] == "chat:write,chat:write.public,channels:read"
+    assert q["redirect_uri"] == "https://api.example.com/connections/oauth/callback"
+    assert "code_challenge" not in q  # Slack doesn't use PKCE
+    r = gclient.get(
+        f"/connections/oauth/callback?state={q['state']}&code=ok", follow_redirects=False
+    )
+    assert r.headers["location"] == f"{WEB}?connected=slack"
+    slack = next(
+        p for p in gclient.get("/connections", headers=h).json() if p["provider"] == "slack"
+    )
+    assert slack["accounts"][0]["display_name"] == "Asha Studio (Slack)"
+    r = gclient.post("/connections/slack/start", json={"redirect_to": WEB}, headers=h)
+    state = parse_qs(urlsplit(r.json()["auth_url"]).query)["state"][0]
+    r = gclient.get(
+        f"/connections/oauth/callback?state={state}&code=slack-denied", follow_redirects=False
+    )
+    assert r.headers["location"].endswith("status=error")
+
+
+def test_connect_with_key_checks_it_and_wakes_waiting_tasks(gclient, make_user, db):
+    uid = make_user()
+    h = auth(uid)
+    ws = gclient.get("/me", headers=h).json()["workspace"]["id"]
+    task = gclient.post("/tasks", json={"objective": "Telegram the team"}, headers=h).json()["id"]
+    db.execute("update tasks set status = 'planned' where id = %s", (task,))
+    db.execute(
+        "update tasks set status = 'blocked', waiting_for_connection = '{telegram}' where id = %s",
+        (task,),
+    )
+
+    r = gclient.post(
+        "/connections/telegram/key", json={"fields": {"bot_token": "bad-token"}}, headers=h
+    )
+    assert r.status_code == 422 and "BotFather" in r.text
+    r = gclient.post("/connections/telegram/key", json={"fields": {}}, headers=h)
+    assert r.status_code == 422 and "Bot token" in r.text
+
+    r = gclient.post(
+        "/connections/telegram/key", json={"fields": {"bot_token": "123:good"}}, headers=h
+    )
+    assert r.status_code == 201 and r.json()["display_name"] == "@asha_bot"
+    # Stored encrypted, and the waiting task resumed by itself.
+    blob = db.execute(
+        "select ciphertext from connection_secrets where workspace_id = %s", (ws,)
+    ).fetchone()[0]
+    assert b"123:good" not in bytes(blob)
+    status, waiting = db.execute(
+        "select status::text, waiting_for_connection from tasks where id = %s", (task,)
+    ).fetchone()
+    assert status == "running" and waiting == []
+    assert gclient.post("/connections/gmail/key", json={"fields": {}}, headers=h).status_code == 409
+    assert (
+        gclient.post("/connections/notion/key", json={"fields": {}}, headers=h).status_code == 409
     )

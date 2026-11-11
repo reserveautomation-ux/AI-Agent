@@ -99,7 +99,10 @@ TOOLS: tuple[ToolSpec, ...] = (
             "type": "object",
             "properties": {
                 "name": _S,
-                "format": {"type": "string", "enum": ["csv", "markdown", "json", "html"]},
+                "format": {
+                    "type": "string",
+                    "enum": ["csv", "markdown", "json", "html", "css", "js", "txt"],
+                },
                 "content": _S,
             },
             "required": ["name", "format", "content"],
@@ -140,7 +143,10 @@ TOOLS: tuple[ToolSpec, ...] = (
             "type": "object",
             "properties": {
                 "name": _S,
-                "format": {"type": "string", "enum": ["csv", "markdown", "json", "html"]},
+                "format": {
+                    "type": "string",
+                    "enum": ["csv", "markdown", "json", "html", "css", "js", "txt"],
+                },
                 "content": _S,
             },
             "required": ["name", "format", "content"],
@@ -245,18 +251,86 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "deploy_web",
         "software",
-        "Deploy a web app to production.",
+        "Put a website made of this task's files (index.html, styles.css, …) online. "
+        "Needs approval.",
         T.EXTERNAL_COMMITMENT,
         "vercel",
-        _obj(project=_S, ref=_S),
+        {
+            "type": "object",
+            "properties": {
+                "project": {"type": "string", "description": "Short name, e.g. asha-bakery"},
+                "files": {"type": "array", "items": _S, "description": "File names to publish"},
+            },
+            "required": ["project", "files"],
+            "additionalProperties": False,
+        },
     ),
     ToolSpec(
         "send_whatsapp",
         "communication",
-        "Send a WhatsApp message from your business number.",
+        "Send a WhatsApp message from the owner's business number. Needs approval.",
         T.EXTERNAL_COMMITMENT,
         "whatsapp",
-        _obj(to=_S, message=_S),
+        {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Phone with country code, e.g. +9198…"},
+                "message": _S,
+            },
+            "required": ["to", "message"],
+            "additionalProperties": False,
+        },
+    ),
+    ToolSpec(
+        "send_telegram",
+        "communication",
+        "Send a Telegram message through the owner's bot. Needs approval.",
+        T.EXTERNAL_COMMITMENT,
+        "telegram",
+        {
+            "type": "object",
+            "properties": {
+                "chat": {"type": "string", "description": "Chat ID or @channelname"},
+                "message": _S,
+            },
+            "required": ["chat", "message"],
+            "additionalProperties": False,
+        },
+    ),
+    ToolSpec(
+        "post_slack",
+        "communication",
+        "Post a message to a Slack channel. Needs approval.",
+        T.EXTERNAL_COMMITMENT,
+        "slack",
+        {
+            "type": "object",
+            "properties": {
+                "channel": {"type": "string", "description": "e.g. #general or a channel ID"},
+                "message": _S,
+            },
+            "required": ["channel", "message"],
+            "additionalProperties": False,
+        },
+    ),
+    ToolSpec(
+        "github_save_files",
+        "software",
+        "Save files from this task (made with create_document) to a GitHub repository. "
+        "Needs approval.",
+        T.EXTERNAL_COMMITMENT,
+        "github",
+        {
+            "type": "object",
+            "properties": {
+                "repo": {"type": "string", "description": "Repository name, e.g. bakery-site"},
+                "files": {"type": "array", "items": _S, "description": "File names to save"},
+                "message": {"type": "string", "description": "What changed"},
+                "private": {"type": "boolean"},
+            },
+            "required": ["repo", "files"],
+            "additionalProperties": False,
+        },
     ),
     ToolSpec(
         "post_social",

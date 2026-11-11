@@ -12,13 +12,26 @@ CONTENT_TYPES = {
     "markdown": "text/markdown",
     "json": "application/json",
     "html": "text/html",
+    "css": "text/css",
+    "js": "text/javascript",
+    "txt": "text/plain",
 }
-EXTENSIONS = {"csv": "csv", "markdown": "md", "json": "json", "html": "html"}
+EXTENSIONS = {
+    "csv": "csv",
+    "markdown": "md",
+    "json": "json",
+    "html": "html",
+    "css": "css",
+    "js": "js",
+    "txt": "txt",
+}
 MAX_BYTES = 5 * 1024 * 1024
 
 
 def safe_name(name: str, fmt: str) -> str:
-    stem = re.sub(r"[^\w\- ]+", "", name).strip().replace(" ", "_")[:80] or "report"
+    """A flat, safe file name that keeps names like index.html or styles.css intact."""
+    base = name.replace("\\", "/").split("/")[-1]  # never a path
+    stem = re.sub(r"[^\w\-. ]+", "", base).strip().replace(" ", "_").strip(".")[:80] or "report"
     ext = EXTENSIONS[fmt]
     return stem if stem.lower().endswith("." + ext) else f"{stem}.{ext}"
 
