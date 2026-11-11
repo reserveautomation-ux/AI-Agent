@@ -62,7 +62,8 @@
         {
           "faceIDPermission": "Workforce OS uses Face ID to confirm payments, bookings and other high-impact actions you approve."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

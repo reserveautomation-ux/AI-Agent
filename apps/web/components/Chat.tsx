@@ -6,6 +6,7 @@ import { Markdown } from "@/components/Markdown";
 import {
   api,
   ApiError,
+  post,
   joinNames,
   serviceName,
   streamChat,
@@ -15,6 +16,7 @@ import {
   type ConversationDetail,
   type Me,
 } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { useSpeak } from "@/lib/useSpeak";
 import { useSpeech, VOICE_LANGUAGES } from "@/lib/useSpeech";
 
@@ -290,14 +292,31 @@ export function Chat() {
   const name = me?.email?.split("@")[0]?.split(/[._-]/)[0];
   const greeting = name ? `How can I help, ${name[0].toUpperCase()}${name.slice(1)}?` : "How can I help?";
 
+  const stopAll = async () => {
+    if (!me) return;
+    const enabling = !me.workspace.kill_switch;
+    if (enabling && !confirm("Stop all agents? New tasks are blocked until you resume.")) return;
+    try {
+      await post("/workspace/kill-switch", { enabled: enabling });
+      window.location.reload();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  const title = conversations.find((c) => c.id === activeId)?.title;
+
   return (
-    <div className="chat">
-      <aside className={`chat-side ${sidebar ? "open" : ""}`}>
-        <button className="new-chat" onClick={() => openConversation(null)}>
-          ＋ New chat
-        </button>
-        <nav aria-label="Chats">
-          {conversations.length === 0 && <p className="muted small">Your chats appear here.</p>}
+    <div className="chat paper">
+      <aside className={`chat-side ${sidebar ? "open" : ""}`} aria-label="Conversations">
+        <div className="side-head">
+          <span className="mono-label">Conversations</span>
+          <button className="text-btn" onClick={() => openConversation(null)}>
+            + New
+          </button>
+        </div>
+        <nav className="side-list">
+          {conversations.length === 0 && <p className="side-empty">Your conversations appear here.</p>}
           {conversations.map((c) => (
             <div key={c.id} className={`chat-link ${c.id === activeId ? "active" : ""}`}>
               <button onClick={() => openConversation(c.id)} title={c.title}>
@@ -309,9 +328,25 @@ export function Chat() {
             </div>
           ))}
         </nav>
-        <div className="chat-side-foot">
-          <label className="check">
-            Voice
+        <nav className="side-app" aria-label="App">
+          <span className="mono-label">Workspace</span>
+          {APP_LINKS.map((l) => (
+            <Link key={l.href} href={l.href}>
+              {l.label}
+            </Link>
+          ))}
+          {me?.workspace.role === "owner" && (
+            <button className="text-btn stop" onClick={stopAll}>
+              {me.workspace.kill_switch ? "Resume agents" : "Stop all agents"}
+            </button>
+          )}
+          <button className="text-btn" onClick={() => supabase().auth.signOut()}>
+            Sign out
+          </button>
+        </nav>
+        <div className="side-foot">
+          <label>
+            <span className="mono-label">Voice</span>
             <select
               value={lang}
               onChange={(e) => {
@@ -328,7 +363,7 @@ export function Chat() {
             </select>
           </label>
           {tts.supported && (
-            <label className="check">
+            <label className="side-check">
               <input
                 type="checkbox"
                 checked={readAloud}
@@ -346,26 +381,37 @@ export function Chat() {
       {sidebar && <div className="chat-scrim" onClick={() => setSidebar(false)} />}
 
       <section className="chat-main-col">
-        <div className="chat-top">
-          <button className="ghost small chat-menu" onClick={() => setSidebar(true)} aria-label="Show chats">
-            ☰ Chats
-          </button>
-          <span className="muted small">
-            {conversations.find((c) => c.id === activeId)?.title ?? "New chat"}
+        <header className="asst-head">
+          <span className="avatar big" aria-hidden>
+            <FeatherIcon />
+            <i className="avatar-dot" />
           </span>
-        </div>
+          <div className="asst-title">
+            <h1>AI Assistant</h1>
+            <p className="mono-label">{title ? title : "Executive assistant"}</p>
+          </div>
+          <div className="asst-actions">
+            <button className="icon-plain" onClick={() => openConversation(null)} aria-label="New conversation" title="New conversation">
+              <PlusIcon />
+            </button>
+            <button className="icon-plain menu-btn" onClick={() => setSidebar(true)} aria-label="Show conversations">
+              <MenuIcon />
+            </button>
+          </div>
+        </header>
 
         <div className="chat-scroll">
           {messages.length === 0 ? (
             <div className="chat-empty">
-              <h1>{greeting}</h1>
-              <p className="muted">
+              <p className="mono-label ruled">Your assistant</p>
+              <h2>{greeting}</h2>
+              <p className="lede">
                 Ask anything, or tell me what to get done. I remember what you tell me, and my
                 workforce handles the real work. Nothing is sent, booked or paid without your OK.
               </p>
               <div className="suggest">
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} className="chip" onClick={() => send(s)}>
+                  <button key={s} className="suggest-card" onClick={() => send(s)}>
                     {s}
                   </button>
                 ))}
@@ -373,6 +419,7 @@ export function Chat() {
             </div>
           ) : (
             <div className="chat-log">
+              <p className="mono-label ruled">Conversation transcript</p>
               {messages.map((m, idx) => (
                 <MessageView
                   key={m.id}
@@ -388,80 +435,83 @@ export function Chat() {
           )}
         </div>
 
-        {error && <p className="error-text chat-error">{error}</p>}
-        {dictation.error && <p className="error-text chat-error">{dictation.error}</p>}
+        {(error || dictation.error) && <p className="chat-error">{error ?? dictation.error}</p>}
 
-        <div className="composer">
-          <textarea
-            ref={inputRef}
-            rows={1}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKey}
-            placeholder={dictation.listening ? "Listening… speak now" : "Message your assistant"}
-            aria-label="Message"
-          />
-          <div className="composer-actions">
+        <div className="composer-wrap">
+          <div className={`composer ${dictation.listening ? "listening" : ""}`}>
+            <textarea
+              ref={inputRef}
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKey}
+              placeholder={dictation.listening ? "Listening… speak now" : "Write what you’re thinking…"}
+              aria-label="Message"
+            />
             {dictation.supported && (
               <button
-                className={`icon-btn ${dictation.listening ? "rec" : ""}`}
+                className={`icon-plain mic-btn ${dictation.listening ? "rec" : ""}`}
                 onClick={toggleDictation}
                 aria-label={dictation.listening ? "Stop dictation" : "Dictate"}
                 title="Dictate"
                 disabled={voice !== "off"}
               >
-                🎙
+                <MicIcon />
               </button>
             )}
             {streaming ? (
-              <button className="icon-btn send" onClick={() => abortRef.current?.abort()} aria-label="Stop">
-                ■
+              <button className="send-btn active" onClick={() => abortRef.current?.abort()} aria-label="Stop">
+                <StopIcon />
               </button>
             ) : input.trim() ? (
               <button
-                className="icon-btn send"
+                className="send-btn active"
                 onClick={() => {
                   if (dictation.listening) dictation.stop();
                   void send(input).then((r) => readAloud && r && tts.speak(r, lang, "last"));
                 }}
                 aria-label="Send"
               >
-                ↑
+                <ArrowIcon />
+              </button>
+            ) : conversation.supported && tts.supported ? (
+              <button className="send-btn" onClick={startVoice} aria-label="Talk to your assistant" title="Voice conversation">
+                <WaveIcon />
               </button>
             ) : (
-              conversation.supported &&
-              tts.supported && (
-                <button className="icon-btn send" onClick={startVoice} aria-label="Talk to your assistant" title="Voice conversation">
-                  ◉
-                </button>
-              )
+              <button className="send-btn" disabled aria-label="Send">
+                <ArrowIcon />
+              </button>
             )}
           </div>
+          <p className="mono-label composer-note">Shift + Enter for a new line</p>
         </div>
-        <p className="muted small composer-note">
-          Enter to send · Shift+Enter for a new line · ◉ for a voice conversation
-        </p>
       </section>
 
       {voice !== "off" && (
-        <div className="voice-mode" role="dialog" aria-label="Voice conversation">
+        <div className="voice-mode paper" role="dialog" aria-label="Voice conversation">
+          <p className="mono-label">Voice conversation</p>
           <button className={`orb ${voice}`} onClick={tapOrb} aria-label="Tap to talk or interrupt">
-            <span />
+            <span className="orb-ring" />
+            <span className="orb-core">
+              <FeatherIcon />
+            </span>
           </button>
           <p className="voice-state">
             {
               {
                 listening: "Listening…",
                 thinking: "Thinking…",
-                speaking: "Speaking · tap to interrupt",
-                paused: "Tap the circle to talk",
+                speaking: "Speaking",
+                paused: "Tap to talk",
                 off: "",
               }[voice]
             }
           </p>
+          <p className="mono-label">{voice === "speaking" ? "Tap the circle to interrupt" : voice === "listening" ? "Go ahead, I'm listening" : " "}</p>
           <p className="voice-heard">{voice === "listening" ? heard : ""}</p>
-          {conversation.error && <p className="error-text">{conversation.error}</p>}
-          <button className="ghost" onClick={endVoice}>
+          {conversation.error && <p className="chat-error">{conversation.error}</p>}
+          <button className="end-voice" onClick={endVoice}>
             End voice
           </button>
         </div>
@@ -469,6 +519,15 @@ export function Chat() {
     </div>
   );
 }
+
+const APP_LINKS = [
+  { href: "/tasks", label: "Tasks" },
+  { href: "/approvals", label: "Approvals" },
+  { href: "/connections", label: "Connections" },
+  { href: "/memory", label: "Memory" },
+  { href: "/workforce", label: "Workforce" },
+  { href: "/audit", label: "Audit log" },
+];
 
 function MessageView({
   m,
@@ -486,36 +545,122 @@ function MessageView({
   if (m.role === "user") {
     return (
       <div className="msg user">
-        <div className="bubble">
-          {m.via === "voice" && <span className="via">🎙 </span>}
-          {m.content}
+        <div className="bubble">{m.content}</div>
+        <p className="mono-label who">{m.via === "voice" ? "You · voice" : "You"}</p>
+      </div>
+    );
+  }
+  if (m.meta.kind === "task_update" && m.meta.task_id) {
+    const t = tasks[m.meta.task_id] ?? { id: m.meta.task_id, title: "Task", status: m.meta.status ?? "running" };
+    return (
+      <div className="msg assistant">
+        <span className="avatar" aria-hidden>
+          <FeatherIcon />
+        </span>
+        <div className="msg-body">
+          <ToolCard t={t} description={m.content} />
+          <p className="mono-label who">Assistant · task update</p>
         </div>
       </div>
     );
   }
-  const update = m.meta.kind === "task_update" && m.meta.task_id ? tasks[m.meta.task_id] : undefined;
   return (
-    <div className={`msg assistant ${m.meta.kind === "task_update" ? "update" : ""}`}>
-      {update && <TaskChip t={update} label="Task update" />}
-      {m.content ? <Markdown text={m.content} /> : typing ? <span className="typing" aria-label="Thinking"><i /><i /><i /></span> : null}
-      {(m.meta.tasks ?? []).map((t) => (
-        <TaskChip key={t.id} t={tasks[t.id] ?? t} label="Started a task" />
-      ))}
-      {(m.meta.memories ?? []).map((x) => (
-        <p key={x} className="muted small memory-note">
-          💾 Remembered: {x}
-        </p>
-      ))}
-      {m.meta.interrupted && <p className="muted small">(reply was cut off)</p>}
-      {!typing && m.content && (
-        <div className="msg-tools">
-          <button className="ghost small" onClick={() => navigator.clipboard?.writeText(m.content)} title="Copy">
-            Copy
-          </button>
-          {onSpeak && (
-            <button className="ghost small" onClick={onSpeak} title="Read aloud">
-              {speaking ? "■ Stop" : "🔊 Listen"}
-            </button>
+    <div className="msg assistant">
+      <span className="avatar" aria-hidden>
+        <FeatherIcon />
+      </span>
+      <div className="msg-body">
+        <div className="bubble">
+          {m.content ? (
+            <Markdown text={m.content} />
+          ) : typing ? (
+            <span className="typing" aria-label="Thinking">
+              <i />
+              <i />
+              <i />
+            </span>
+          ) : null}
+          {m.meta.interrupted && <p className="cut">Reply was cut off.</p>}
+        </div>
+        {(m.meta.tasks ?? []).map((t) => (
+          <ToolCard key={t.id} t={tasks[t.id] ?? t} description="Handed to your workforce. Updates appear here." />
+        ))}
+        {(m.meta.memories ?? []).map((x) => (
+          <div key={x} className="tool-card memory">
+            <div className="tool-head">
+              <span className="tool-icon">
+                <BookIcon />
+              </span>
+              <div>
+                <p className="tool-title">{x}</p>
+                <p className="mono-label">Saved to memory</p>
+              </div>
+            </div>
+          </div>
+        ))}
+        <div className="who-row">
+          <p className="mono-label who">{m.via === "voice" ? "Assistant · voice transcript" : "Assistant"}</p>
+          {!typing && m.content && (
+            <span className="msg-tools">
+              <button onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
+              {onSpeak && <button onClick={onSpeak}>{speaking ? "Stop" : "Listen"}</button>}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function statusLine(t: ChatTaskRef): [string, string] {
+  const waiting = t.status === "blocked" ? (t.waiting_for_connection ?? []) : [];
+  if (waiting.length) return [`Waiting for ${joinNames(waiting.map(serviceName))}`, "wait"];
+  return (
+    (
+      {
+        draft: ["Starting", "work"],
+        planned: ["Queued", "work"],
+        queued: ["Queued", "work"],
+        running: ["Working", "work"],
+        verifying: ["Checking the result", "work"],
+        waiting_for_approval: ["Needs your approval", "wait"],
+        blocked: ["Needs your input", "wait"],
+        completed: ["Done", "done"],
+        failed: ["Couldn't finish", "fail"],
+        cancelled: ["Cancelled", "fail"],
+        expired: ["Expired", "fail"],
+      } as Record<string, [string, string]>
+    )[t.status] ?? [STATUS_TEXT[t.status] ?? t.status, "work"]
+  );
+}
+
+function ToolCard({ t, description }: { t: ChatTaskRef; description?: string }) {
+  const [label, tone] = statusLine(t);
+  const waiting = t.status === "blocked" ? (t.waiting_for_connection ?? []) : [];
+  const Icon = { done: CheckIcon, fail: BanIcon, wait: waiting.length ? PlugIcon : PenIcon, work: SparkIcon }[tone] ?? SparkIcon;
+  return (
+    <div className={`tool-card ${tone}`}>
+      <div className="tool-head">
+        <span className="tool-icon">
+          <Icon />
+        </span>
+        <div>
+          <Link href={`/tasks/${t.id}`} className="tool-title">
+            {t.title}
+          </Link>
+          <p className="mono-label">{label}</p>
+        </div>
+      </div>
+      {description && (
+        <div className="tool-desc">
+          <Markdown text={description} />
+        </div>
+      )}
+      {(t.status === "waiting_for_approval" || waiting.length > 0) && (
+        <div className="tool-actions">
+          {t.status === "waiting_for_approval" && <Link href="/approvals">Review & approve →</Link>}
+          {waiting.length > 0 && (
+            <Link href={`/connections?need=${waiting.join(",")}`}>Connect {joinNames(waiting.map(serviceName))} →</Link>
           )}
         </div>
       )}
@@ -523,27 +668,82 @@ function MessageView({
   );
 }
 
-function TaskChip({ t, label }: { t: ChatTaskRef; label: string }) {
-  const waiting = t.status === "blocked" ? (t.waiting_for_connection ?? []) : [];
-  const tone =
-    t.status === "completed" ? "ok" : t.status === "failed" ? "bad" : ACTIVE.has(t.status) && t.status !== "blocked" && t.status !== "waiting_for_approval" ? "info" : "warn";
+// --- line icons (inherit the text colour) ---------------------------------------------
+
+function Svg({ children, size = 20 }: { children: React.ReactNode; size?: number }) {
   return (
-    <div className="task-chip">
-      <span className="muted small">{label}</span>
-      <Link href={`/tasks/${t.id}`} className="task-chip-title">
-        {t.title}
-      </Link>
-      <span className={`badge ${tone}`}>{STATUS_TEXT[t.status] ?? t.status}</span>
-      {t.status === "waiting_for_approval" && (
-        <Link className="button small-link" href="/approvals">
-          Review & approve
-        </Link>
-      )}
-      {waiting.length > 0 && (
-        <Link className="button small-link" href={`/connections?need=${waiting.join(",")}`}>
-          Connect {joinNames(waiting.map(serviceName))}
-        </Link>
-      )}
-    </div>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {children}
+    </svg>
   );
 }
+const FeatherIcon = () => (
+  <Svg>
+    <path d="M20 4c-6 0-11 3.5-13 9.5L5.5 18.5" />
+    <path d="M20 4c0 6-3 11-9.5 12.5L7 17" />
+    <path d="M9 12.5h5.5" />
+    <path d="M4 20l3.5-3.5" />
+  </Svg>
+);
+const PlusIcon = () => (
+  <Svg size={26}>
+    <path d="M12 5v14M5 12h14" />
+  </Svg>
+);
+const MenuIcon = () => (
+  <Svg size={26}>
+    <path d="M5 7h14M5 12h14M5 17h14" />
+  </Svg>
+);
+const MicIcon = () => (
+  <Svg size={22}>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+  </Svg>
+);
+const ArrowIcon = () => (
+  <Svg size={22}>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </Svg>
+);
+const StopIcon = () => (
+  <Svg size={18}>
+    <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" />
+  </Svg>
+);
+const WaveIcon = () => (
+  <Svg size={22}>
+    <path d="M5 10v4M9 7v10M13 4v16M17 8v8M21 11v2" />
+  </Svg>
+);
+const CheckIcon = () => (
+  <Svg>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </Svg>
+);
+const BanIcon = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M6.5 6.5l11 11" />
+  </Svg>
+);
+const PlugIcon = () => (
+  <Svg>
+    <path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0V7zM12 16v5" />
+  </Svg>
+);
+const PenIcon = () => (
+  <Svg>
+    <path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" />
+  </Svg>
+);
+const SparkIcon = () => (
+  <Svg>
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />
+  </Svg>
+);
+const BookIcon = () => (
+  <Svg>
+    <path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4zM5 17a3 3 0 0 1 3-3h10" />
+  </Svg>
+);

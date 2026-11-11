@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as Speech from 'expo-speech';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Easing,
@@ -13,13 +13,15 @@ import {
   Pressable,
   ScrollView,
   Switch,
+  Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChatText, speakable } from '@/components/ChatText';
-import { Badge, Button, ErrorText, Icon, T, type IconName } from '@/components/ui';
+import { Icon, type IconName } from '@/components/ui';
 import {
   ApiError,
   api,
@@ -32,7 +34,7 @@ import {
 } from '@/lib/api';
 import { confirmAsync } from '@/lib/confirm';
 import { joinNames, serviceName } from '@/lib/labels';
-import { useTheme } from '@/lib/theme';
+import { FONTS, usePaper } from '@/lib/theme';
 import { VOICE_LANGUAGES, useVoice } from '@/lib/useVoice';
 
 const SUGGESTIONS = [
@@ -59,7 +61,14 @@ const STATUS_TEXT: Record<string, string> = {
 
 const I = {
   menu: { ios: 'line.3.horizontal', android: 'menu', web: 'menu' },
-  edit: { ios: 'square.and.pencil', android: 'edit_square', web: 'edit_square' },
+  plus: { ios: 'plus', android: 'add', web: 'add' },
+  feather: { ios: 'leaf', android: 'history_edu', web: 'history_edu' },
+  check: { ios: 'checkmark', android: 'check', web: 'check' },
+  ban: { ios: 'nosign', android: 'block', web: 'block' },
+  plug: { ios: 'powerplug', android: 'power', web: 'power' },
+  pen: { ios: 'pencil', android: 'edit', web: 'edit' },
+  spark: { ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' },
+  book: { ios: 'book.closed', android: 'menu_book', web: 'menu_book' },
   mic: { ios: 'mic.fill', android: 'mic', web: 'mic' },
   send: { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' },
   stop: { ios: 'stop.fill', android: 'stop', web: 'stop' },
@@ -69,7 +78,7 @@ const I = {
 type VoiceState = 'off' | 'listening' | 'thinking' | 'speaking' | 'paused';
 
 export default function ChatScreen() {
-  const c = useTheme();
+  const p = usePaper();
   const insets = useSafeAreaInsets();
   const [me, setMe] = useState<Me | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -331,34 +340,36 @@ export default function ChatScreen() {
   const setPref = (key: string, value: string) => AsyncStorage.setItem(key, value).catch(() => {});
   const first = me?.email?.split('@')[0]?.split(/[._-]/)[0];
   const greeting = first ? `How can I help, ${first[0].toUpperCase()}${first.slice(1)}?` : 'How can I help?';
-  const title = conversations.find((x) => x.id === activeId)?.title ?? 'New chat';
+  const title = conversations.find((x) => x.id === activeId)?.title;
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, height: 50, borderBottomWidth: 1, borderBottomColor: c.border, backgroundColor: c.surface }}>
-        <IconButton icon={I.menu} label="Chats" onPress={() => setListOpen(true)} />
-        <T bold numberOfLines={1} style={{ flex: 1, textAlign: 'center' }}>
-          {title}
-        </T>
-        <IconButton icon={I.edit} label="New chat" onPress={() => openConversation(null)} />
+    <View style={{ flex: 1, backgroundColor: p.bg, paddingTop: insets.top }}>
+      <Grid />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: p.line }}>
+        <Avatar big />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontFamily: FONTS.serif, fontSize: 30, color: p.ink, lineHeight: 34 }}>AI Assistant</Text>
+          <Mono numberOfLines={1}>{title ?? 'Executive assistant'}</Mono>
+        </View>
+        <IconButton icon={I.plus} label="New conversation" onPress={() => openConversation(null)} />
+        <IconButton icon={I.menu} label="Show conversations" onPress={() => setListOpen(true)} />
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {messages.length === 0 ? (
-          <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20, gap: 10 }} keyboardShouldPersistTaps="handled">
-            <T bold size={26} style={{ textAlign: 'center' }}>
-              {greeting}
-            </T>
-            <T muted style={{ textAlign: 'center', marginBottom: 10 }}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 28, gap: 10 }} keyboardShouldPersistTaps="handled">
+            <Ruled>Your assistant</Ruled>
+            <Text style={{ fontFamily: FONTS.serif, fontSize: 36, lineHeight: 40, color: p.ink }}>{greeting}</Text>
+            <Text style={{ fontFamily: FONTS.sans, fontSize: 16, lineHeight: 24, color: p.muted, marginBottom: 14 }}>
               Ask anything or tell me what to get done. I remember you, and my workforce does the real work. Nothing is sent, booked or paid without your OK.
-            </T>
+            </Text>
             {SUGGESTIONS.map((s) => (
               <Pressable
                 key={s}
                 onPress={() => send(s)}
                 accessibilityRole="button"
-                style={({ pressed }) => ({ borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: 14, padding: 12, opacity: pressed ? 0.7 : 1 })}>
-                <T small>{s}</T>
+                style={({ pressed }) => ({ borderWidth: 1, borderColor: p.line, backgroundColor: p.card, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16, opacity: pressed ? 0.7 : 1 })}>
+                <Text style={{ fontFamily: FONTS.sans, fontSize: 15, color: p.ink }}>{s}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -367,11 +378,12 @@ export default function ChatScreen() {
             ref={listRef}
             data={messages}
             keyExtractor={(m) => m.id}
-            contentContainerStyle={{ padding: 16, gap: 16 }}
+            ListHeaderComponent={<Ruled>Conversation transcript</Ruled>}
+            contentContainerStyle={{ padding: 16, paddingTop: 24, gap: 22 }}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item, index }) => (
-              <Bubble
+              <Message
                 m={item}
                 tasks={tasks}
                 typing={streaming && index === messages.length - 1 && item.role === 'assistant'}
@@ -382,34 +394,58 @@ export default function ChatScreen() {
           />
         )}
 
-        <View style={{ paddingHorizontal: 12 }}>
-          <ErrorText>{error ?? (mode === 'dictate' ? mic.error : null)}</ErrorText>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, margin: 10, padding: 6, paddingLeft: 14, borderRadius: 24, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface }}>
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder={mic.listening && mode === 'dictate' ? 'Listening… speak now' : 'Message your assistant'}
-            placeholderTextColor={c.muted}
-            multiline
-            style={{ flex: 1, color: c.text, fontSize: 16, maxHeight: 120, paddingVertical: 8 }}
-            accessibilityLabel="Message"
-          />
-          {mic.available && (
-            <RoundButton
-              icon={I.mic}
-              label={mic.listening ? 'Stop dictation' : 'Dictate'}
-              onPress={toggleDictation}
-              tone={mic.listening && mode === 'dictate' ? c.bad : undefined}
+        {!!(error ?? (mode === 'dictate' ? mic.error : null)) && (
+          <Text style={{ color: p.bad, fontFamily: FONTS.sans, paddingHorizontal: 20, marginBottom: 6 }}>
+            {error ?? mic.error}
+          </Text>
+        )}
+        <View style={{ paddingHorizontal: 12, paddingBottom: 10 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'flex-end',
+              gap: 6,
+              padding: 8,
+              paddingLeft: 20,
+              borderRadius: 30,
+              borderWidth: 1,
+              borderColor: mic.listening && mode === 'dictate' ? p.terra : p.line,
+              backgroundColor: p.card,
+              shadowColor: '#2f3b45',
+              shadowOpacity: 0.08,
+              shadowRadius: 16,
+              shadowOffset: { width: 0, height: 8 },
+              elevation: 2,
+            }}>
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder={mic.listening && mode === 'dictate' ? 'Listening… speak now' : 'Write what you’re thinking…'}
+              placeholderTextColor={p.muted}
+              multiline
+              style={{ flex: 1, color: p.ink, fontFamily: FONTS.sans, fontSize: 17, maxHeight: 130, paddingTop: 13, paddingBottom: 13 }}
+              accessibilityLabel="Message"
             />
-          )}
-          {streaming ? (
-            <RoundButton icon={I.stop} label="Stop" onPress={() => abortRef.current?.abort()} filled />
-          ) : input.trim() ? (
-            <RoundButton icon={I.send} label="Send" onPress={sendTyped} filled />
-          ) : mic.available ? (
-            <RoundButton icon={I.wave} label="Talk to your assistant" onPress={startVoice} filled />
-          ) : null}
+            {mic.available && (
+              <Pressable
+                onPress={toggleDictation}
+                accessibilityRole="button"
+                accessibilityLabel={mic.listening ? 'Stop dictation' : 'Dictate'}
+                hitSlop={6}
+                style={{ height: 48, width: 40, alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name={I.mic} color={mic.listening && mode === 'dictate' ? p.bad : p.ink} size={22} />
+              </Pressable>
+            )}
+            {streaming ? (
+              <SendButton icon={I.stop} label="Stop" onPress={() => abortRef.current?.abort()} active />
+            ) : input.trim() ? (
+              <SendButton icon={I.send} label="Send" onPress={sendTyped} active />
+            ) : mic.available ? (
+              <SendButton icon={I.wave} label="Talk to your assistant" onPress={startVoice} />
+            ) : (
+              <SendButton icon={I.send} label="Send" onPress={() => {}} />
+            )}
+          </View>
         </View>
       </KeyboardAvoidingView>
 
@@ -434,114 +470,225 @@ export default function ChatScreen() {
       />
 
       <Modal visible={voice !== 'off'} animationType="fade" onRequestClose={endVoice}>
-        <View style={{ flex: 1, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 }}>
+        <View style={{ flex: 1, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', gap: 18, padding: 24 }}>
+          <Grid />
+          <Mono>Voice conversation</Mono>
           <Orb state={voice} onPress={tapOrb} />
-          <T bold size={20}>
-            {{ listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking · tap to interrupt', paused: 'Tap the circle to talk', off: '' }[voice]}
-          </T>
-          <T muted style={{ textAlign: 'center', minHeight: 48 }}>
+          <Text style={{ fontFamily: FONTS.serif, fontSize: 38, color: p.ink }}>
+            {{ listening: 'Listening…', thinking: 'Thinking…', speaking: 'Speaking', paused: 'Tap to talk', off: '' }[voice]}
+          </Text>
+          <Mono>{voice === 'speaking' ? 'Tap the circle to interrupt' : voice === 'listening' ? 'Go ahead, I’m listening' : ' '}</Mono>
+          <Text style={{ fontFamily: FONTS.sans, fontSize: 17, color: p.muted, textAlign: 'center', minHeight: 50 }}>
             {voice === 'listening' ? heard : ''}
-          </T>
-          {mode === 'converse' && mic.error && <ErrorText>{mic.error}</ErrorText>}
-          <Button title="End voice" variant="ghost" onPress={endVoice} />
+          </Text>
+          {mode === 'converse' && !!mic.error && <Text style={{ color: p.bad, fontFamily: FONTS.sans }}>{mic.error}</Text>}
+          <Pressable
+            onPress={endVoice}
+            accessibilityRole="button"
+            accessibilityLabel="End voice"
+            style={{ borderWidth: 1, borderColor: p.line, backgroundColor: p.card, borderRadius: 999, paddingVertical: 12, paddingHorizontal: 24 }}>
+            <Mono color={p.ink}>End voice</Mono>
+          </Pressable>
         </View>
       </Modal>
     </View>
   );
 }
 
-function IconButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
-  const c = useTheme();
+// --- pieces of the paper look ------------------------------------------------------------
+
+function Mono({ children, color, numberOfLines }: { children: ReactNode; color?: string; numberOfLines?: number }) {
+  const p = usePaper();
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={8} style={{ padding: 10 }}>
-      <Icon name={icon} color={c.text} size={22} />
+    <Text numberOfLines={numberOfLines} style={{ fontFamily: FONTS.mono, fontSize: 11.5, letterSpacing: 2.6, textTransform: 'uppercase', color: color ?? p.muted }}>
+      {children}
+    </Text>
+  );
+}
+
+function Ruled({ children }: { children: ReactNode }) {
+  const p = usePaper();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 18 }}>
+      <View style={{ width: 44, height: 1.5, backgroundColor: p.terra }} />
+      <Mono>{children}</Mono>
+    </View>
+  );
+}
+
+/** Faint graph-paper lines behind the conversation. */
+function Grid() {
+  const p = usePaper();
+  const { width, height } = useWindowDimensions();
+  const step = 42;
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      {Array.from({ length: Math.ceil(width / step) }, (_, i) => (
+        <View key={`v${i}`} style={{ position: 'absolute', top: 0, bottom: 0, left: i * step, width: 1, backgroundColor: p.grid }} />
+      ))}
+      {Array.from({ length: Math.ceil(height / step) }, (_, i) => (
+        <View key={`h${i}`} style={{ position: 'absolute', left: 0, right: 0, top: i * step, height: 1, backgroundColor: p.grid }} />
+      ))}
+    </View>
+  );
+}
+
+function Avatar({ big }: { big?: boolean }) {
+  const p = usePaper();
+  const size = big ? 52 : 40;
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: p.terraSoft, borderWidth: 1.5, borderColor: p.terra + '99', alignItems: 'center', justifyContent: 'center' }}>
+      <Icon name={I.feather} color={big ? p.terra : p.teal} size={big ? 24 : 18} />
+      {big && <View style={{ position: 'absolute', top: 1, right: 1, width: 9, height: 9, borderRadius: 5, backgroundColor: p.terra }} />}
+    </View>
+  );
+}
+
+function IconButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const p = usePaper();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={8} style={{ padding: 8 }}>
+      <Icon name={icon} color={p.ink} size={24} />
     </Pressable>
   );
 }
 
-function RoundButton({ icon, label, onPress, filled, tone }: { icon: IconName; label: string; onPress: () => void; filled?: boolean; tone?: string }) {
-  const c = useTheme();
-  const bg = tone ?? (filled ? c.brand : 'transparent');
+function SendButton({ icon, label, onPress, active }: { icon: IconName; label: string; onPress: () => void; active?: boolean }) {
+  const p = usePaper();
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => ({ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: bg, borderWidth: filled || tone ? 0 : 1, borderColor: c.border, opacity: pressed ? 0.7 : 1 })}>
-      <Icon name={icon} color={filled || tone ? c.onBrand : c.text} size={20} />
+      style={({ pressed }) => ({ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? p.teal : p.sage, opacity: pressed ? 0.75 : 1 })}>
+      <Icon name={icon} color="#ffffff" size={20} />
     </Pressable>
   );
 }
 
-function Bubble({ m, tasks, typing, speaking, onSpeak }: { m: ChatMessage; tasks: Record<string, ChatTaskRef>; typing: boolean; speaking: boolean; onSpeak: () => void }) {
-  const c = useTheme();
+function Message({ m, tasks, typing, speaking, onSpeak }: { m: ChatMessage; tasks: Record<string, ChatTaskRef>; typing: boolean; speaking: boolean; onSpeak: () => void }) {
+  const p = usePaper();
   if (m.role === 'user') {
     return (
-      <View style={{ alignSelf: 'flex-end', maxWidth: '85%', backgroundColor: c.surface, borderColor: c.border, borderWidth: 1, borderRadius: 18, paddingVertical: 10, paddingHorizontal: 14 }}>
-        <T>
-          {m.via === 'voice' ? '🎙 ' : ''}
-          {m.content}
-        </T>
+      <View style={{ alignItems: 'flex-end', gap: 8 }}>
+        <View style={{ maxWidth: '86%', backgroundColor: p.teal, borderRadius: 24, borderBottomRightRadius: 6, paddingVertical: 14, paddingHorizontal: 18 }}>
+          <Text style={{ color: p.tealInk, fontFamily: FONTS.sans, fontSize: 16.5, lineHeight: 24 }}>{m.content}</Text>
+        </View>
+        <Mono>{m.via === 'voice' ? 'You · voice' : 'You'}</Mono>
       </View>
     );
   }
-  const update = m.meta.kind === 'task_update' && m.meta.task_id ? tasks[m.meta.task_id] : undefined;
-  return (
-    <View style={update ? { borderLeftWidth: 3, borderLeftColor: c.accent, paddingLeft: 12 } : undefined}>
-      {update && <TaskChip t={update} label="Task update" />}
-      {m.content ? <ChatText text={m.content} /> : typing ? <T muted>…</T> : null}
-      {(m.meta.tasks ?? []).map((t) => (
-        <TaskChip key={t.id} t={tasks[t.id] ?? t} label="Started a task" />
-      ))}
-      {(m.meta.memories ?? []).map((x) => (
-        <T key={x} small muted style={{ marginTop: 6 }}>
-          💾 Remembered: {x}
-        </T>
-      ))}
-      {!typing && !!m.content && (
-        <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
-          <Button title="Copy" small variant="ghost" onPress={() => Clipboard.setStringAsync(m.content)} />
-          <Button title={speaking ? 'Stop' : 'Listen'} small variant="ghost" onPress={onSpeak} />
+  if (m.meta.kind === 'task_update' && m.meta.task_id) {
+    const t = tasks[m.meta.task_id] ?? { id: m.meta.task_id, title: 'Task', status: m.meta.status ?? 'running' };
+    return (
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Avatar />
+        <View style={{ flex: 1, gap: 8 }}>
+          <ToolCard t={t} description={m.content} />
+          <Mono>Assistant · task update</Mono>
         </View>
-      )}
+      </View>
+    );
+  }
+  return (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <Avatar />
+      <View style={{ flex: 1, gap: 8, alignItems: 'flex-start' }}>
+        <View style={{ maxWidth: '100%', backgroundColor: p.card, borderColor: p.line, borderWidth: 1, borderRadius: 24, paddingVertical: 14, paddingHorizontal: 18 }}>
+          {m.content ? (
+            <ChatText text={m.content} color={p.ink} family={FONTS.sans} boldFamily={FONTS.sansBold} />
+          ) : typing ? (
+            <Text style={{ color: p.muted, fontSize: 20 }}>• • •</Text>
+          ) : null}
+          {m.meta.interrupted && <Text style={{ color: p.muted, fontFamily: FONTS.sans, marginTop: 6 }}>Reply was cut off.</Text>}
+        </View>
+        {(m.meta.tasks ?? []).map((t) => (
+          <ToolCard key={t.id} t={tasks[t.id] ?? t} description="Handed to your workforce. Updates appear here." />
+        ))}
+        {(m.meta.memories ?? []).map((x) => (
+          <Card2 key={x} icon={I.book} iconColor={p.terra} title={x} label="Saved to memory" />
+        ))}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <Mono>{m.via === 'voice' ? 'Assistant · voice transcript' : 'Assistant'}</Mono>
+          {!typing && !!m.content && (
+            <>
+              <Pressable onPress={() => Clipboard.setStringAsync(m.content)} accessibilityRole="button" accessibilityLabel="Copy" hitSlop={8}>
+                <Mono color={p.teal}>Copy</Mono>
+              </Pressable>
+              <Pressable onPress={onSpeak} accessibilityRole="button" accessibilityLabel={speaking ? 'Stop reading' : 'Listen'} hitSlop={8}>
+                <Mono color={p.teal}>{speaking ? 'Stop' : 'Listen'}</Mono>
+              </Pressable>
+            </>
+          )}
+        </View>
+      </View>
     </View>
   );
 }
 
-function TaskChip({ t, label }: { t: ChatTaskRef; label: string }) {
-  const c = useTheme();
+function statusLine(t: ChatTaskRef): [string, 'done' | 'fail' | 'wait' | 'work'] {
   const waiting = t.status === 'blocked' ? (t.waiting_for_connection ?? []) : [];
-  const tone = t.status === 'completed' ? c.ok : t.status === 'failed' ? c.bad : ['blocked', 'waiting_for_approval'].includes(t.status) ? c.warn : c.info;
+  if (waiting.length) return [`Waiting for ${joinNames(waiting.map(serviceName))}`, 'wait'];
+  const map: Record<string, [string, 'done' | 'fail' | 'wait' | 'work']> = {
+    waiting_for_approval: ['Needs your approval', 'wait'],
+    blocked: ['Needs your input', 'wait'],
+    completed: ['Done', 'done'],
+    failed: ['Couldn’t finish', 'fail'],
+    cancelled: ['Cancelled', 'fail'],
+    expired: ['Expired', 'fail'],
+    verifying: ['Checking the result', 'work'],
+  };
+  return map[t.status] ?? [STATUS_TEXT[t.status] ?? t.status, 'work'];
+}
+
+function Card2({ icon, iconColor, title, label, onPress, children }: { icon: IconName; iconColor: string; title: string; label: string; onPress?: () => void; children?: ReactNode }) {
+  const p = usePaper();
   return (
-    <View style={{ borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, borderRadius: 12, padding: 10, marginVertical: 6, gap: 8 }}>
-      <Pressable onPress={() => router.push(`/tasks/${t.id}`)} accessibilityRole="link">
-        <T small muted>
-          {label}
-        </T>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <T bold>{t.title}</T>
-          <Badge label={STATUS_TEXT[t.status] ?? t.status} tone={tone} />
+    <View style={{ alignSelf: 'stretch', backgroundColor: p.card, borderColor: p.line, borderWidth: 1, borderRadius: 24, padding: 16, gap: 10 }}>
+      <Pressable onPress={onPress} disabled={!onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }} accessibilityRole={onPress ? 'link' : undefined}>
+        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: p.bg, alignItems: 'center', justifyContent: 'center', shadowColor: '#2f3b45', shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2 }}>
+          <Icon name={icon} color={iconColor} size={20} />
+        </View>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={{ fontFamily: FONTS.sansMedium, fontSize: 17, color: p.ink }}>{title}</Text>
+          <Mono>{label}</Mono>
         </View>
       </Pressable>
-      {t.status === 'waiting_for_approval' && <Button title="Review & approve" small onPress={() => router.push('/approvals')} />}
-      {waiting.length > 0 && (
-        <Button
-          title={`Connect ${joinNames(waiting.map(serviceName))}`}
-          small
-          onPress={() => router.push({ pathname: '/connections', params: { need: waiting.join(',') } })}
-        />
-      )}
+      {children}
     </View>
+  );
+}
+
+function ToolCard({ t, description }: { t: ChatTaskRef; description?: string }) {
+  const p = usePaper();
+  const [label, tone] = statusLine(t);
+  const waiting = t.status === 'blocked' ? (t.waiting_for_connection ?? []) : [];
+  const icon = { done: I.check, fail: I.ban, wait: waiting.length ? I.plug : I.pen, work: I.spark }[tone];
+  const color = { done: p.ok, fail: p.muted, wait: p.terra, work: p.teal }[tone];
+  return (
+    <Card2 icon={icon} iconColor={color} title={t.title} label={label} onPress={() => router.push(`/tasks/${t.id}`)}>
+      {!!description && <ChatText text={description} color={p.muted} family={FONTS.sans} boldFamily={FONTS.sansBold} size={15.5} />}
+      {t.status === 'waiting_for_approval' && (
+        <Pressable onPress={() => router.push('/approvals')} accessibilityRole="button" hitSlop={6}>
+          <Text style={{ color: p.teal, fontFamily: FONTS.sansBold, fontSize: 15 }}>Review & approve →</Text>
+        </Pressable>
+      )}
+      {waiting.length > 0 && (
+        <Pressable onPress={() => router.push({ pathname: '/connections', params: { need: waiting.join(',') } })} accessibilityRole="button" hitSlop={6}>
+          <Text style={{ color: p.teal, fontFamily: FONTS.sansBold, fontSize: 15 }}>Connect {joinNames(waiting.map(serviceName))} →</Text>
+        </Pressable>
+      )}
+    </Card2>
   );
 }
 
 function Orb({ state, onPress }: { state: VoiceState; onPress: () => void }) {
-  const c = useTheme();
+  const p = usePaper();
   const [scale] = useState(() => new Animated.Value(1));
   useEffect(() => {
     scale.stopAnimation();
     if (state === 'listening' || state === 'speaking' || state === 'thinking') {
-      const [to, ms] = state === 'speaking' ? [1.08, 260] : state === 'listening' ? [1.1, 800] : [0.92, 600];
+      const [to, ms] = state === 'speaking' ? [1.06, 240] : state === 'listening' ? [1.08, 800] : [0.94, 500];
       const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(scale, { toValue: to, duration: ms, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -551,11 +698,14 @@ function Orb({ state, onPress }: { state: VoiceState; onPress: () => void }) {
       loop.start();
       return () => loop.stop();
     }
-    Animated.timing(scale, { toValue: state === 'paused' ? 0.85 : 1, duration: 200, useNativeDriver: true }).start();
+    Animated.timing(scale, { toValue: state === 'paused' ? 0.86 : 1, duration: 200, useNativeDriver: true }).start();
   }, [state, scale]);
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Tap to talk or interrupt">
-      <Animated.View style={{ width: 170, height: 170, borderRadius: 85, backgroundColor: c.accent, borderWidth: 18, borderColor: c.brand, opacity: state === 'paused' ? 0.6 : 1, transform: [{ scale }] }} />
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Tap to talk or interrupt" style={{ width: 200, height: 200, alignItems: 'center', justifyContent: 'center', marginVertical: 6 }}>
+      <View style={{ position: 'absolute', width: 200, height: 200, borderRadius: 100, borderWidth: 1.5, borderColor: p.terra + '99' }} />
+      <Animated.View style={{ width: 156, height: 156, borderRadius: 78, backgroundColor: state === 'paused' ? p.sage : p.teal, alignItems: 'center', justifyContent: 'center', transform: [{ scale }] }}>
+        <Icon name={I.feather} color={p.tealInk} size={44} />
+      </Animated.View>
     </Pressable>
   );
 }
@@ -572,20 +722,22 @@ function ChatList(props: {
   readAloud: boolean;
   onReadAloud: (v: boolean) => void;
 }) {
-  const c = useTheme();
+  const p = usePaper();
   const insets = useSafeAreaInsets();
   const [langOpen, setLangOpen] = useState(false);
+  const body = { fontFamily: FONTS.sans, fontSize: 16, color: p.ink };
   return (
     <Modal visible={props.open} animationType="slide" transparent onRequestClose={props.onClose}>
       <View style={{ flex: 1, flexDirection: 'row' }}>
-        <View style={{ width: '82%', maxWidth: 340, backgroundColor: c.surface, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12, paddingHorizontal: 12, gap: 8 }}>
-          <Button title="New chat" onPress={() => props.onOpen(null)} />
+        <View style={{ width: '84%', maxWidth: 340, backgroundColor: p.card, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 12, paddingHorizontal: 18, gap: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Mono>Conversations</Mono>
+            <Pressable onPress={() => props.onOpen(null)} accessibilityRole="button" hitSlop={8}>
+              <Text style={{ fontFamily: FONTS.sansBold, color: p.teal, fontSize: 16 }}>+ New</Text>
+            </Pressable>
+          </View>
           <ScrollView style={{ flex: 1 }}>
-            {props.conversations.length === 0 && (
-              <T small muted style={{ padding: 8 }}>
-                Your chats appear here.
-              </T>
-            )}
+            {props.conversations.length === 0 && <Text style={[body, { color: p.muted }]}>Your conversations appear here.</Text>}
             {props.conversations.map((conv) => (
               <Pressable
                 key={conv.id}
@@ -593,20 +745,18 @@ function ChatList(props: {
                 onLongPress={() => props.onDelete(conv)}
                 accessibilityRole="button"
                 accessibilityHint="Long-press to delete"
-                style={{ padding: 12, borderRadius: 10, backgroundColor: conv.id === props.activeId ? c.bg : 'transparent' }}>
-                <T numberOfLines={1}>{conv.title}</T>
+                style={{ paddingVertical: 11, paddingHorizontal: 10, borderRadius: 10, backgroundColor: conv.id === props.activeId ? p.bg : 'transparent' }}>
+                <Text numberOfLines={1} style={body}>
+                  {conv.title}
+                </Text>
               </Pressable>
             ))}
           </ScrollView>
-          <T small muted>
-            Long-press a chat to delete it.
-          </T>
-          <View style={{ borderTopWidth: 1, borderTopColor: c.border, paddingTop: 10, gap: 10 }}>
-            <Pressable onPress={() => setLangOpen((v) => !v)} accessibilityRole="button" style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <T small>Voice language</T>
-              <T small bold>
-                {VOICE_LANGUAGES.find((l) => l.code === props.lang)?.label ?? props.lang}
-              </T>
+          <Mono>Long-press a chat to delete it</Mono>
+          <View style={{ borderTopWidth: 1, borderTopColor: p.line, paddingTop: 12, gap: 12 }}>
+            <Pressable onPress={() => setLangOpen((v) => !v)} accessibilityRole="button" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Mono>Voice</Mono>
+              <Text style={[body, { fontFamily: FONTS.sansMedium }]}>{VOICE_LANGUAGES.find((l) => l.code === props.lang)?.label ?? props.lang}</Text>
             </Pressable>
             {langOpen &&
               VOICE_LANGUAGES.map((l) => (
@@ -616,19 +766,17 @@ function ChatList(props: {
                     props.onLang(l.code);
                     setLangOpen(false);
                   }}
-                  style={{ paddingVertical: 6, paddingLeft: 10 }}>
-                  <T small bold={l.code === props.lang}>
-                    {l.label}
-                  </T>
+                  style={{ paddingVertical: 5, paddingLeft: 10 }}>
+                  <Text style={[body, l.code === props.lang && { fontFamily: FONTS.sansBold }]}>{l.label}</Text>
                 </Pressable>
               ))}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <T small>Read replies aloud</T>
-              <Switch value={props.readAloud} onValueChange={props.onReadAloud} accessibilityLabel="Read replies aloud" />
+              <Text style={body}>Read replies aloud</Text>
+              <Switch value={props.readAloud} onValueChange={props.onReadAloud} accessibilityLabel="Read replies aloud" trackColor={{ true: p.teal }} />
             </View>
           </View>
         </View>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} onPress={props.onClose} accessibilityLabel="Close chats" />
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} onPress={props.onClose} accessibilityLabel="Close conversations" />
       </View>
     </Modal>
   );

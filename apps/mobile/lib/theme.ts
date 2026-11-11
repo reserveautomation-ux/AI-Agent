@@ -63,3 +63,47 @@ export function statusLabel(status: string): string {
   const text = status.replaceAll('_', ' ');
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/** The chat's "paper" look: warm paper, teal ink, terracotta accents. */
+const paperLight = {
+  bg: '#f3efe7',
+  grid: 'rgba(47,59,69,0.055)',
+  card: '#f8f6f1',
+  line: '#e2dccf',
+  ink: '#2f3b45',
+  muted: '#868b8e',
+  teal: '#466a65',
+  tealInk: '#f6f3ec',
+  terra: '#c6846b',
+  terraSoft: '#f1e3da',
+  sage: '#a8beb6',
+  ok: '#1f8a4c',
+  bad: '#c0392b',
+};
+const paperDark: typeof paperLight = {
+  bg: '#1c1b18',
+  grid: 'rgba(255,255,255,0.04)',
+  card: '#25241f',
+  line: '#393630',
+  ink: '#ebe6da',
+  muted: '#9c978b',
+  teal: '#4f7871',
+  tealInk: '#f6f3ec',
+  terra: '#d6977b',
+  terraSoft: '#3b2d26',
+  sage: '#5e766e',
+  ok: '#4ade80',
+  bad: '#f87171',
+};
+export type Paper = typeof paperLight;
+export const FONTS = {
+  serif: 'InstrumentSerif_400Regular',
+  sans: 'DMSans_400Regular',
+  sansMedium: 'DMSans_500Medium',
+  sansBold: 'DMSans_700Bold',
+  mono: 'DMMono_400Regular',
+  monoMedium: 'DMMono_500Medium',
+};
+export function usePaper(): Paper {
+  return useColorScheme() === 'dark' ? paperDark : paperLight;
+}

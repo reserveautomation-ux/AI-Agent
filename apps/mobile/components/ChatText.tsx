@@ -7,9 +7,22 @@ import { useTheme } from '@/lib/theme';
 const TOKEN = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\)|https?:\/\/[^\s)]+)/g;
 
 /** Chat replies with light formatting: paragraphs, bullet lists, **bold**, `code`, links. */
-export function ChatText({ text, size = 16 }: { text: string; size?: number }) {
+export function ChatText({
+  text,
+  size = 16,
+  color,
+  family,
+  boldFamily,
+}: {
+  text: string;
+  size?: number;
+  color?: string;
+  family?: string;
+  boldFamily?: string;
+}) {
   const c = useTheme();
-  const base = { color: c.text, fontSize: size, lineHeight: size * 1.45 };
+  const base = { color: color ?? c.text, fontSize: size, lineHeight: size * 1.5, fontFamily: family };
+  const bold = boldFamily ? { fontFamily: boldFamily } : { fontWeight: '700' as const };
   const mono = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
   const inline = (line: string): ReactNode[] => {
@@ -21,7 +34,7 @@ export function ChatText({ text, size = 16 }: { text: string; size?: number }) {
       const k = out.length;
       if (t.startsWith('**')) {
         out.push(
-          <Text key={k} style={{ fontWeight: '700' }}>
+          <Text key={k} style={bold}>
             {t.slice(2, -2)}
           </Text>,
         );
@@ -73,7 +86,7 @@ export function ChatText({ text, size = 16 }: { text: string; size?: number }) {
       );
     } else {
       blocks.push(
-        <Text key={blocks.length} style={[base, heading ? { fontWeight: '700' } : null]} selectable>
+        <Text key={blocks.length} style={[base, heading ? bold : null]} selectable>
           {inline(heading ? heading[1] : line)}
         </Text>,
       );

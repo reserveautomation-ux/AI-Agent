@@ -1,3 +1,6 @@
+import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
+import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
+import { InstrumentSerif_400Regular } from '@expo-google-fonts/instrument-serif';
 import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, router, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -22,6 +25,12 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    InstrumentSerif_400Regular,
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_700Bold,
+    DMMono_400Regular,
+    DMMono_500Medium,
   });
 
   useEffect(() => {
