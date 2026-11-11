@@ -15,6 +15,7 @@ from urllib.parse import quote_plus
 
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
+from workforce_core import upi_link as upi
 from workforce_core import whatsapp_link as wa
 from workforce_core.approvals import binding_for, canonical_json
 from workforce_core.db import record_audit
@@ -423,6 +424,20 @@ class ToolGateway:
             return (
                 f"WhatsApp message ready for {who}. Give the owner this link to tap and send "
                 f"from their WhatsApp (not sent yet): {link.url}"
+            )
+
+        if name == "upi_link":
+            link = upi.build(
+                str(args.get("upi_id") or ""),
+                str(args.get("name") or ""),
+                args.get("amount"),
+                str(args.get("note") or ""),
+            )
+            amount = f" ₹{link.amount}" if link.amount else ""
+            return (
+                f"UPI payment ready for {link.name or link.vpa} ({link.vpa}){amount}. Give the "
+                f"owner this link to open in their UPI app and approve with their PIN (not paid "
+                f"yet): {link.url}"
             )
 
         if name == "prepare_booking_link":

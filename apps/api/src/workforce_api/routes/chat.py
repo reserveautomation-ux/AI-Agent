@@ -16,6 +16,7 @@ from fastapi.responses import Response, StreamingResponse
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, Field, model_validator
+from workforce_core import upi_link as upi
 from workforce_core import whatsapp_link as wa
 from workforce_core.schedules import create_schedule
 
@@ -244,6 +245,22 @@ class _Tools:
             "to": link.to,
             "name": str(args.get("name") or "")[:60],
             "text": link.text,
+        }
+
+    async def upi(self, args: dict) -> dict:
+        link = upi.build(
+            str(args.get("upi_id") or ""),
+            str(args.get("name") or ""),
+            args.get("amount"),
+            str(args.get("note") or ""),
+        )
+        return {
+            "kind": "upi",
+            "url": link.url,
+            "to": link.vpa,
+            "name": link.name,
+            "amount": link.amount,
+            "text": link.note,
         }
 
     async def remember(self, content: str, kind: str, trusted: bool) -> str:

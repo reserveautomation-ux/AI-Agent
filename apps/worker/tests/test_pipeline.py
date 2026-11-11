@@ -493,3 +493,22 @@ def test_worker_shutdown_hands_task_back(database_url, db, workspace):
         "select lease_owner, last_error from tasks where id = %s", (task,)
     ).fetchone()
     assert owner is None and "restarted" in error
+
+
+def test_payments_agent_prepares_upi_link(database_url, db, workspace):
+    task = new_task(db, workspace, "Pay Ramesh 500 for milk, ramesh@okhdfcbank")
+    llm = FakeLLM(
+        lambda p, n: text_resp(plan(agent="fi_payments", deliverable="prepared_action")),
+        lambda p, n: (
+            tool_resp(
+                ("upi_link", {"upi_id": "ramesh@okhdfcbank", "name": "Ramesh", "amount": "500"})
+            )
+            if tool_turns(p) == 0
+            else text_resp(step_result("UPI payment ready"))
+        ),
+        lambda p, n: text_resp(verdict()),
+    )
+    assert run(database_url, lambda c: advance(c, llm, task)) == "completed"
+    sent = str([c[1]["messages"] for c in llm.calls])
+    assert "upi://pay?pa=ramesh@okhdfcbank&pn=Ramesh&am=500.00&cu=INR" in sent
+    assert "not paid yet" in sent

@@ -271,6 +271,10 @@ async def _handle(app, link_id: str, update: dict) -> None:
             await say(event["text"] or "Done.")
             for a in links:
                 who = a.get("name") or a.get("to") or "a contact"
-                await say(f"Tap to send on WhatsApp to {who}:\n{a['url']}")
+                if a["kind"] == "upi":
+                    amount = f" ₹{a['amount']}" if a.get("amount") else ""
+                    await say(f"Tap to pay {who} ({a['to']}){amount} in your UPI app:\n{a['url']}")
+                else:
+                    await say(f"Tap to send on WhatsApp to {who}:\n{a['url']}")
         elif event["type"] == "error":
             await say(event["message"])

@@ -86,7 +86,7 @@ CATEGORY_WORDS = {
     "Build & deploy": "website site app code repository host publish deploy launch store",
     "Documents": "files docs notes drive storage",
     "Images & media": "picture photo image poster logo design art illustration banner thumbnail",
-    "Money": "stocks shares invest trading broker portfolio",
+    "Money": "stocks shares invest trading broker portfolio pay payment upi gpay phonepe paytm",
     "Travel": "flight hotel trip travel booking",
     "Marketing": "social post instagram linkedin twitter x facebook",
     "Rides": "cab taxi ride auto bike car pickup",
@@ -172,6 +172,19 @@ CONNECTORS: tuple[Connector, ...] = (
         open_url="https://wa.me/",
         note="Reading or sending automatically isn't possible on a personal number (WhatsApp's "
         "rules); for that, connect a WhatsApp Business number below.",
+    ),
+    C(
+        "upi",
+        "UPI payments",
+        "Money",
+        "₹",
+        'Say "pay Ramesh ₹500 for milk" and your UPI app (GPay, PhonePe, Paytm, BHIM) opens '
+        "with it filled in; you enter your PIN. Nothing to connect.",
+        A.DEEP_LINK,
+        True,
+        ("upi_link",),
+        open_url="upi://pay",
+        note="Works on a phone with a UPI app. The assistant never sees your PIN or bank details.",
     ),
     C(
         "whatsapp",

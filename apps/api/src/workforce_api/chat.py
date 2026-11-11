@@ -58,6 +58,10 @@ sent without them). Use a number from memory or the chat if you have one, with c
 code; otherwise leave it empty and they pick the contact. Write the message in the language \
 and tone they'd use with that person. Only use start_task for WhatsApp when they've \
 connected a WhatsApp Business number and want it sent automatically after approval.
+- To pay someone by UPI, call upi_payment with their UPI ID (from memory or the chat; ask \
+if you don't have it, never guess), the amount and a short note. Their UPI app opens with it \
+filled in and they approve with their PIN; you never handle money or PINs. Repeat the payee \
+and amount back to them in your reply.
 - For anything at a later time or on repeat ("remind me at 6", "every Monday 9am send me \
 my unread mail"), call schedule: kind "reminder" just notifies them; kind "task" has the \
 workforce do the job at that time. Use their local time from "Now" above.
@@ -160,6 +164,24 @@ TOOLS: list[dict[str, Any]] = [
                 "message": {"type": "string"},
             },
             "required": ["message"],
+        },
+    },
+    {
+        "name": "upi_payment",
+        "description": (
+            "Prepare a UPI payment for the person to approve in their own UPI app (GPay, PhonePe, "
+            "Paytm...): opens with the payee and amount filled in; they enter their PIN. Never "
+            "guess a UPI ID."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "upi_id": {"type": "string", "description": "e.g. ramesh@okhdfcbank"},
+                "name": {"type": "string", "description": "Payee name"},
+                "amount": {"type": "string", "description": "Rupees, e.g. 500"},
+                "note": {"type": "string", "description": "Short note, e.g. Rent Nov"},
+            },
+            "required": ["upi_id"],
         },
     },
     {"type": "web_search_20260209", "name": "web_search", "max_uses": 3},
@@ -388,6 +410,8 @@ class ToolRunner(Protocol):
 
     async def whatsapp(self, args: dict) -> dict: ...
 
+    async def upi(self, args: dict) -> dict: ...
+
 
 async def reply(
     model: ChatModel,
@@ -448,6 +472,16 @@ async def reply(
                         "Ready: a button opens their WhatsApp with this message"
                         + (f" to {item['to']}" if item["to"] else " (they pick the contact)")
                         + ". It is NOT sent until they tap Send in WhatsApp."
+                    )
+                elif block.name == "upi_payment":
+                    item = await tools.upi(args)
+                    actions.append(item)
+                    yield {"type": "action", "action": item}
+                    out = (
+                        f"Ready: a button opens their UPI app to pay {item['name'] or item['to']} "
+                        f"({item['to']})"
+                        + (f" ₹{item['amount']}" if item["amount"] else "")
+                        + ". Nothing is paid until they approve with their UPI PIN."
                     )
                 elif block.name == "schedule":
                     item = await tools.schedule(args)

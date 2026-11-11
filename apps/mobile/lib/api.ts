@@ -1,11 +1,13 @@
-import { fetch as expoFetch } from 'expo/fetch';
-import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import { Platform } from 'react-native';
+import { fetch as expoFetch } from "expo/fetch";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import { Platform } from "react-native";
 
-import { supabase } from './supabase';
+import { supabase } from "./supabase";
 
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
+export const API_URL = (
+  process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000"
+).replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(
@@ -19,7 +21,7 @@ export class ApiError extends Error {
 async function token(): Promise<string> {
   const { data } = await supabase.auth.getSession();
   const t = data.session?.access_token;
-  if (!t) throw new ApiError(401, 'Not signed in');
+  if (!t) throw new ApiError(401, "Not signed in");
   return t;
 }
 
@@ -27,7 +29,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${await token()}`,
       ...(init.headers ?? {}),
     },
@@ -36,7 +38,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     let detail = res.statusText || `HTTP ${res.status}`;
     try {
       const body = await res.json();
-      detail = typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
+      detail =
+        typeof body.detail === "string"
+          ? body.detail
+          : JSON.stringify(body.detail);
     } catch {
       /* non-JSON error body */
     }
@@ -47,49 +52,69 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const post = <T>(path: string, body?: unknown) =>
-  api<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
+  api<T>(path, {
+    method: "POST",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 
-export const del = (path: string) => api<void>(path, { method: 'DELETE' });
+export const del = (path: string) => api<void>(path, { method: "DELETE" });
 
 /** Download a task file and open the phone's share sheet (save, WhatsApp, Drive…). */
 export async function shareArtifact(a: Artifact): Promise<void> {
   const auth = { Authorization: `Bearer ${await token()}` };
-  if (Platform.OS === 'web') {
+  if (Platform.OS === "web") {
     const res = await fetch(`${API_URL}/artifacts/${a.id}`, { headers: auth });
-    if (!res.ok) throw new ApiError(res.status, 'Download failed');
+    if (!res.ok) throw new ApiError(res.status, "Download failed");
     const url = URL.createObjectURL(await res.blob());
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = a.name;
     link.click();
     URL.revokeObjectURL(url);
     return;
   }
-  const res = await expoFetch(`${API_URL}/artifacts/${a.id}`, { headers: auth });
-  if (!res.ok) throw new ApiError(res.status, 'Download failed');
+  const res = await expoFetch(`${API_URL}/artifacts/${a.id}`, {
+    headers: auth,
+  });
+  if (!res.ok) throw new ApiError(res.status, "Download failed");
   const file = new File(Paths.cache, a.name);
   if (file.exists) file.delete();
   file.create();
   file.write(await res.bytes());
-  if (!(await Sharing.isAvailableAsync())) throw new ApiError(0, 'Sharing is not available');
-  await Sharing.shareAsync(file.uri, { mimeType: a.file_type, dialogTitle: a.name });
+  if (!(await Sharing.isAvailableAsync()))
+    throw new ApiError(0, "Sharing is not available");
+  await Sharing.shareAsync(file.uri, {
+    mimeType: a.file_type,
+    dialogTitle: a.name,
+  });
 }
 
 // --- Types mirroring apps/api/src/workforce_api/schemas.py -------------------------
 
+/** Something ready for you to do in another app: a WhatsApp message to send, or a UPI payment
+ * to approve with your PIN. */
+export type ChatAction = {
+  kind: "whatsapp" | "upi";
+  url: string;
+  to: string;
+  name?: string;
+  text: string;
+  amount?: string;
+};
+
 export type TaskStatus =
-  | 'draft'
-  | 'planned'
-  | 'queued'
-  | 'running'
-  | 'waiting_for_tool'
-  | 'waiting_for_approval'
-  | 'verifying'
-  | 'completed'
-  | 'blocked'
-  | 'failed'
-  | 'cancelled'
-  | 'expired';
+  | "draft"
+  | "planned"
+  | "queued"
+  | "running"
+  | "waiting_for_tool"
+  | "waiting_for_approval"
+  | "verifying"
+  | "completed"
+  | "blocked"
+  | "failed"
+  | "cancelled"
+  | "expired";
 
 export interface Task {
   id: string;
@@ -166,7 +191,13 @@ export interface TaskDetail extends Task {
 export interface Me {
   user_id: string;
   email: string | null;
-  workspace: { id: string; name: string; role: string; kill_switch: boolean; timezone: string };
+  workspace: {
+    id: string;
+    name: string;
+    role: string;
+    kill_switch: boolean;
+    timezone: string;
+  };
   /** What this person named their assistant. */
   assistant_name: string;
 }
@@ -176,19 +207,27 @@ export interface Capability {
   area: string;
   title: string;
   example: string;
-  handling: 'automatic' | 'asks_approval' | 'owner_approval' | 'you_confirm_in_app';
+  handling:
+    | "automatic"
+    | "asks_approval"
+    | "owner_approval"
+    | "you_confirm_in_app";
 }
 
 export interface Agent {
   id: string;
   name: string;
-  role: 'chief' | 'department_head' | 'specialist' | 'verifier';
-  status: 'sandbox' | 'active' | 'suspended' | 'retired';
+  role: "chief" | "department_head" | "specialist" | "verifier";
+  status: "sandbox" | "active" | "suspended" | "retired";
   template_key: string | null;
   department_id: string | null;
   allowed_tools: string[];
   description: string | null;
-  latest_evaluation: { sample_size: number; success_rate: number | null; quality_score: number | null } | null;
+  latest_evaluation: {
+    sample_size: number;
+    success_rate: number | null;
+    quality_score: number | null;
+  } | null;
   lessons: string[];
   generation: number;
 }
@@ -209,16 +248,22 @@ export interface Workforce {
 export interface LifecycleDecision {
   agent_id: string;
   agent_name: string;
-  action: 'keep' | 'insufficient_data' | 'clone' | 'suspend' | 'retire';
+  action: "keep" | "insufficient_data" | "clone" | "suspend" | "retire";
   reason: string;
   applied: boolean;
 }
 
 export interface Memory {
   id: string;
-  owner_scope: 'workspace' | 'agent';
+  owner_scope: "workspace" | "agent";
   agent_name: string | null;
-  memory_type: 'preference' | 'fact' | 'contact' | 'instruction' | 'learning' | 'episode';
+  memory_type:
+    | "preference"
+    | "fact"
+    | "contact"
+    | "instruction"
+    | "learning"
+    | "episode";
   content: string;
   trusted: boolean;
   pinned: boolean;
@@ -238,7 +283,13 @@ export interface ApprovalItem {
   recipient: string | null;
   item: string | null;
   risk_tier: number;
-  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'consumed' | 'invalidated';
+  status:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "expired"
+    | "consumed"
+    | "invalidated";
   expires_at: string;
   created_at: string;
   decided_at: string | null;
@@ -250,7 +301,7 @@ export interface ApprovalItem {
 export interface ConnectedAccount {
   id: string;
   display_name: string | null;
-  status: 'active' | 'expired' | 'error' | 'revoked';
+  status: "active" | "expired" | "error" | "revoked";
   scopes: string[];
   last_used_at: string | null;
   last_error: string | null;
@@ -280,7 +331,7 @@ export interface Connector {
   icon: string;
   description: string;
   /** oauth2: sign in · api_key: paste a key · deep_link: opens their app · builtin: nothing to do */
-  auth: 'oauth2' | 'api_key' | 'deep_link' | 'builtin';
+  auth: "oauth2" | "api_key" | "deep_link" | "builtin";
   live: boolean;
   /** Can be connected on this server right now. */
   available: boolean;
@@ -312,19 +363,24 @@ export interface ChatTaskRef {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
-  via: 'text' | 'voice';
+  via: "text" | "voice";
   meta: {
-    kind?: 'reply' | 'task_update' | 'reminder';
+    kind?: "reply" | "task_update" | "reminder";
     task_id?: string;
     status?: TaskStatus;
     waiting_for_connection?: string[];
     tasks?: ChatTaskRef[];
     memories?: string[];
     schedules?: ScheduleRef[];
-    attachments?: { id: string; name: string; media_type: string; preview?: string }[];
-    actions?: { kind: 'whatsapp'; url: string; to: string; name?: string; text: string }[];
+    attachments?: {
+      id: string;
+      name: string;
+      media_type: string;
+      preview?: string;
+    }[];
+    actions?: ChatAction[];
     interrupted?: boolean;
   };
   created_at: string;
@@ -336,24 +392,32 @@ export interface ConversationDetail extends Conversation {
 }
 
 export type ChatEvent =
-  | { type: 'conversation'; id: string; title: string }
-  | { type: 'text'; text: string }
-  | { type: 'task'; task: ChatTaskRef }
-  | { type: 'memory'; content: string }
-  | { type: 'schedule'; schedule: ScheduleRef }
-  | { type: 'action'; action: { kind: 'whatsapp'; url: string; to: string; name?: string; text: string } }
-  | { type: 'done'; message_id: string; text: string }
-  | { type: 'error'; message: string };
+  | { type: "conversation"; id: string; title: string }
+  | { type: "text"; text: string }
+  | { type: "task"; task: ChatTaskRef }
+  | { type: "memory"; content: string }
+  | { type: "schedule"; schedule: ScheduleRef }
+  | { type: "action"; action: ChatAction }
+  | { type: "done"; message_id: string; text: string }
+  | { type: "error"; message: string };
 
 /** Send a message and receive the reply as it is written (Server-Sent Events over expo/fetch). */
 export async function streamChat(
-  body: { content: string; conversation_id?: string | null; via: 'text' | 'voice'; attachments?: string[] },
+  body: {
+    content: string;
+    conversation_id?: string | null;
+    via: "text" | "voice";
+    attachments?: string[];
+  },
   onEvent: (e: ChatEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await expoFetch(`${API_URL}/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` },
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${await token()}`,
+    },
     body: JSON.stringify(body),
     signal,
   });
@@ -361,7 +425,8 @@ export async function streamChat(
     let detail = `HTTP ${res.status}`;
     try {
       const b = await res.json();
-      detail = typeof b.detail === 'string' ? b.detail : JSON.stringify(b.detail);
+      detail =
+        typeof b.detail === "string" ? b.detail : JSON.stringify(b.detail);
     } catch {
       /* non-JSON error body */
     }
@@ -369,17 +434,18 @@ export async function streamChat(
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     let cut;
-    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+    while ((cut = buffer.indexOf("\n\n")) >= 0) {
       const chunk = buffer.slice(0, cut);
       buffer = buffer.slice(cut + 2);
-      for (const line of chunk.split('\n')) {
-        if (line.startsWith('data: ')) onEvent(JSON.parse(line.slice(6)) as ChatEvent);
+      for (const line of chunk.split("\n")) {
+        if (line.startsWith("data: "))
+          onEvent(JSON.parse(line.slice(6)) as ChatEvent);
       }
     }
   }
@@ -388,7 +454,7 @@ export async function streamChat(
 export interface ScheduleRef {
   id: string;
   title: string;
-  kind: 'reminder' | 'task';
+  kind: "reminder" | "task";
   repeat: string;
   next_run_at: string;
   text: string;
@@ -396,10 +462,10 @@ export interface ScheduleRef {
 
 export interface Schedule {
   id: string;
-  kind: 'reminder' | 'task';
+  kind: "reminder" | "task";
   title: string;
   what: string;
-  repeat: 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly';
+  repeat: "none" | "daily" | "weekdays" | "weekly" | "monthly";
   timezone: string;
   next_run_at: string | null;
   active: boolean;
@@ -408,9 +474,9 @@ export interface Schedule {
 }
 
 export const REPEAT_LABEL: Record<string, string> = {
-  none: 'Once',
-  daily: 'Every day',
-  weekdays: 'Every weekday',
-  weekly: 'Every week',
-  monthly: 'Every month',
+  none: "Once",
+  daily: "Every day",
+  weekdays: "Every weekday",
+  weekly: "Every week",
+  monthly: "Every month",
 };

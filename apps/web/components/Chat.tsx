@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { Markdown } from "@/components/Markdown";
 import {
   api,
@@ -34,7 +40,15 @@ const SUGGESTIONS = [
   "Explain mutual funds vs index funds simply",
 ];
 
-const ACTIVE = new Set(["draft", "planned", "queued", "running", "verifying", "waiting_for_approval", "blocked"]);
+const ACTIVE = new Set([
+  "draft",
+  "planned",
+  "queued",
+  "running",
+  "verifying",
+  "waiting_for_approval",
+  "blocked",
+]);
 const STATUS_TEXT: Record<string, string> = {
   draft: "Starting",
   planned: "Planned",
@@ -103,9 +117,14 @@ export function Chat() {
     const prefs = { ...DEFAULT_VOICE, ...load("voice.prefs", DEFAULT_VOICE) };
     setVoicePrefs(prefs);
     // Already downloaded once: load the in-app natural voice from the browser's cache.
-    if (prefs.engine === "natural" && naturalVoice.supported()) naturalVoice.load();
-    api<Me>("/me").then(setMe).catch(() => {});
-    api<Conversation[]>("/conversations").then(setConversations).catch((e) => setError(e.message));
+    if (prefs.engine === "natural" && naturalVoice.supported())
+      naturalVoice.load();
+    api<Me>("/me")
+      .then(setMe)
+      .catch(() => {});
+    api<Conversation[]>("/conversations")
+      .then(setConversations)
+      .catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => {
@@ -142,10 +161,16 @@ export function Chat() {
         const d = await api<ConversationDetail>(`/conversations/${activeId}`);
         if (activeRef.current !== activeId) return;
         setMessages((old) => {
-          const fresh = d.messages.slice(old.length).filter((m) => m.meta.kind === "task_update");
+          const fresh = d.messages
+            .slice(old.length)
+            .filter((m) => m.meta.kind === "task_update");
           // Task news is read aloud too when "Read replies aloud" is on (not mid voice chat).
           if (fresh.length && readAloud && voiceRef.current === "off") {
-            speak(fresh.map((m) => m.content).join(" "), lang, fresh.at(-1)!.id);
+            speak(
+              fresh.map((m) => m.content).join(" "),
+              lang,
+              fresh.at(-1)!.id,
+            );
           }
           return d.messages;
         });
@@ -173,8 +198,22 @@ export function Chat() {
       const replyId = `pending-${Date.now()}`;
       setMessages((m) => [
         ...m,
-        { id: `u-${Date.now()}`, role: "user", content, via, meta: atts.length ? { attachments: atts } : {}, created_at: now },
-        { id: replyId, role: "assistant", content: "", via, meta: { kind: "reply", tasks: [] }, created_at: now },
+        {
+          id: `u-${Date.now()}`,
+          role: "user",
+          content,
+          via,
+          meta: atts.length ? { attachments: atts } : {},
+          created_at: now,
+        },
+        {
+          id: replyId,
+          role: "assistant",
+          content: "",
+          via,
+          meta: { kind: "reply", tasks: [] },
+          created_at: now,
+        },
       ]);
       setStreaming(true);
       const controller = new AbortController();
@@ -184,7 +223,12 @@ export function Chat() {
         setMessages((ms) => ms.map((m) => (m.id === replyId ? fn(m) : m)));
       try {
         await streamChat(
-          { content, conversation_id: activeRef.current, via, attachments: atts.map((a) => a.id) },
+          {
+            content,
+            conversation_id: activeRef.current,
+            via,
+            attachments: atts.map((a) => a.id),
+          },
           (e) => {
             if (e.type === "conversation") {
               if (!activeRef.current) {
@@ -201,13 +245,34 @@ export function Chat() {
               patch((m) => ({ ...m, content: m.content + e.text }));
             } else if (e.type === "task") {
               setTasks((t) => ({ ...t, [e.task.id]: e.task }));
-              patch((m) => ({ ...m, meta: { ...m.meta, tasks: [...(m.meta.tasks ?? []), e.task] } }));
+              patch((m) => ({
+                ...m,
+                meta: { ...m.meta, tasks: [...(m.meta.tasks ?? []), e.task] },
+              }));
             } else if (e.type === "action") {
-              patch((m) => ({ ...m, meta: { ...m.meta, actions: [...(m.meta.actions ?? []), e.action] } }));
+              patch((m) => ({
+                ...m,
+                meta: {
+                  ...m.meta,
+                  actions: [...(m.meta.actions ?? []), e.action],
+                },
+              }));
             } else if (e.type === "schedule") {
-              patch((m) => ({ ...m, meta: { ...m.meta, schedules: [...(m.meta.schedules ?? []), e.schedule] } }));
+              patch((m) => ({
+                ...m,
+                meta: {
+                  ...m.meta,
+                  schedules: [...(m.meta.schedules ?? []), e.schedule],
+                },
+              }));
             } else if (e.type === "memory") {
-              patch((m) => ({ ...m, meta: { ...m.meta, memories: [...(m.meta.memories ?? []), e.content] } }));
+              patch((m) => ({
+                ...m,
+                meta: {
+                  ...m.meta,
+                  memories: [...(m.meta.memories ?? []), e.content],
+                },
+              }));
             } else if (e.type === "done") {
               reply = e.text;
               patch((m) => ({ ...m, id: e.message_id, content: e.text }));
@@ -219,7 +284,11 @@ export function Chat() {
         );
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
-          setError(e instanceof ApiError ? e.message : "Couldn't reach your assistant. Check your connection.");
+          setError(
+            e instanceof ApiError
+              ? e.message
+              : "Couldn't reach your assistant. Check your connection.",
+          );
           setMessages((ms) => ms.filter((m) => m.id !== replyId || m.content));
         }
       } finally {
@@ -295,7 +364,8 @@ export function Chat() {
   // --- typing + dictation ---------------------------------------------------------
   const dictation = useSpeech({
     lang,
-    onTranscript: (t) => setInput(baseRef.current ? `${baseRef.current} ${t}` : t),
+    onTranscript: (t) =>
+      setInput(baseRef.current ? `${baseRef.current} ${t}` : t),
   });
   const toggleDictation = () => {
     if (dictation.listening) return dictation.stop();
@@ -368,12 +438,18 @@ export function Chat() {
   };
 
   const name = me?.email?.split("@")[0]?.split(/[._-]/)[0];
-  const greeting = name ? `How can I help, ${name[0].toUpperCase()}${name.slice(1)}?` : "How can I help?";
+  const greeting = name
+    ? `How can I help, ${name[0].toUpperCase()}${name.slice(1)}?`
+    : "How can I help?";
 
   const stopAll = async () => {
     if (!me) return;
     const enabling = !me.workspace.kill_switch;
-    if (enabling && !confirm("Stop all agents? New tasks are blocked until you resume.")) return;
+    if (
+      enabling &&
+      !confirm("Stop all agents? New tasks are blocked until you resume.")
+    )
+      return;
     try {
       await post("/workspace/kill-switch", { enabled: enabling });
       window.location.reload();
@@ -387,7 +463,10 @@ export function Chat() {
 
   return (
     <div className="chat paper">
-      <aside className={`chat-side ${sidebar ? "open" : ""}`} aria-label="Conversations">
+      <aside
+        className={`chat-side ${sidebar ? "open" : ""}`}
+        aria-label="Conversations"
+      >
         <div className="side-head">
           <span className="mono-label">Conversations</span>
           <button className="text-btn" onClick={() => openConversation(null)}>
@@ -395,13 +474,22 @@ export function Chat() {
           </button>
         </div>
         <nav className="side-list">
-          {conversations.length === 0 && <p className="side-empty">Your conversations appear here.</p>}
+          {conversations.length === 0 && (
+            <p className="side-empty">Your conversations appear here.</p>
+          )}
           {conversations.map((c) => (
-            <div key={c.id} className={`chat-link ${c.id === activeId ? "active" : ""}`}>
+            <div
+              key={c.id}
+              className={`chat-link ${c.id === activeId ? "active" : ""}`}
+            >
               <button onClick={() => openConversation(c.id)} title={c.title}>
                 {c.title}
               </button>
-              <button className="chat-del" onClick={() => remove(c.id)} aria-label={`Delete ${c.title}`}>
+              <button
+                className="chat-del"
+                onClick={() => remove(c.id)}
+                aria-label={`Delete ${c.title}`}
+              >
                 ×
               </button>
             </div>
@@ -419,7 +507,10 @@ export function Chat() {
               {me.workspace.kill_switch ? "Resume agents" : "Stop all agents"}
             </button>
           )}
-          <button className="text-btn" onClick={() => supabase().auth.signOut()}>
+          <button
+            className="text-btn"
+            onClick={() => supabase().auth.signOut()}
+          >
             Sign out
           </button>
         </nav>
@@ -460,27 +551,49 @@ export function Chat() {
           )}
         </div>
       </aside>
-      {sidebar && <div className="chat-scrim" onClick={() => setSidebar(false)} />}
+      {sidebar && (
+        <div className="chat-scrim" onClick={() => setSidebar(false)} />
+      )}
 
       <section className="chat-main-col">
         <header className="asst-head">
-          <button className="avatar big" onClick={() => setCustomize(true)} aria-label={`Customize ${assistantName}`} title="Name and voice">
+          <button
+            className="avatar big"
+            onClick={() => setCustomize(true)}
+            aria-label={`Customize ${assistantName}`}
+            title="Name and voice"
+          >
             <FeatherIcon />
             <i className="avatar-dot" />
           </button>
           <div className="asst-title">
             <h1>
-              <button className="title-btn" onClick={() => setCustomize(true)} title="Name and voice">
+              <button
+                className="title-btn"
+                onClick={() => setCustomize(true)}
+                title="Name and voice"
+              >
                 {assistantName}
               </button>
             </h1>
-            <p className="mono-label">{title ? title : "Executive assistant"}</p>
+            <p className="mono-label">
+              {title ? title : "Executive assistant"}
+            </p>
           </div>
           <div className="asst-actions">
-            <button className="icon-plain" onClick={() => openConversation(null)} aria-label="New conversation" title="New conversation">
+            <button
+              className="icon-plain"
+              onClick={() => openConversation(null)}
+              aria-label="New conversation"
+              title="New conversation"
+            >
               <PlusIcon />
             </button>
-            <button className="icon-plain menu-btn" onClick={() => setSidebar(true)} aria-label="Show conversations">
+            <button
+              className="icon-plain menu-btn"
+              onClick={() => setSidebar(true)}
+              aria-label="Show conversations"
+            >
               <MenuIcon />
             </button>
           </div>
@@ -492,12 +605,17 @@ export function Chat() {
               <p className="mono-label ruled">Your assistant</p>
               <h2>{greeting}</h2>
               <p className="lede">
-                Ask anything, or tell me what to get done. I remember what you tell me, and my
-                workforce handles the real work. Nothing is sent, booked or paid without your OK.
+                Ask anything, or tell me what to get done. I remember what you
+                tell me, and my workforce handles the real work. Nothing is
+                sent, booked or paid without your OK.
               </p>
               <div className="suggest">
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} className="suggest-card" onClick={() => send(s)}>
+                  <button
+                    key={s}
+                    className="suggest-card"
+                    onClick={() => send(s)}
+                  >
                     {s}
                   </button>
                 ))}
@@ -512,9 +630,20 @@ export function Chat() {
                   m={m}
                   name={assistantName}
                   tasks={tasks}
-                  typing={streaming && idx === messages.length - 1 && m.role === "assistant"}
+                  typing={
+                    streaming &&
+                    idx === messages.length - 1 &&
+                    m.role === "assistant"
+                  }
                   speaking={tts.speakingId === m.id}
-                  onSpeak={tts.supported ? () => (tts.speakingId === m.id ? tts.stop() : tts.speak(m.content, lang, m.id)) : undefined}
+                  onSpeak={
+                    tts.supported
+                      ? () =>
+                          tts.speakingId === m.id
+                            ? tts.stop()
+                            : tts.speak(m.content, lang, m.id)
+                      : undefined
+                  }
                 />
               ))}
               <div ref={endRef} />
@@ -522,16 +651,27 @@ export function Chat() {
           )}
         </div>
 
-        {(error || dictation.error) && <p className="chat-error">{error ?? dictation.error}</p>}
+        {(error || dictation.error) && (
+          <p className="chat-error">{error ?? dictation.error}</p>
+        )}
 
         <div className="composer-wrap">
           {(files.length > 0 || uploading > 0) && (
             <div className="attach-row">
               {files.map((f) => (
                 <span key={f.id} className="attach-chip">
-                  {f.preview ? <img src={f.preview} alt="" /> : <span className="pdf">PDF</span>}
+                  {f.preview ? (
+                    <img src={f.preview} alt="" />
+                  ) : (
+                    <span className="pdf">PDF</span>
+                  )}
                   <span className="attach-name">{f.name}</span>
-                  <button onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))} aria-label={`Remove ${f.name}`}>
+                  <button
+                    onClick={() =>
+                      setFiles((fs) => fs.filter((x) => x.id !== f.id))
+                    }
+                    aria-label={`Remove ${f.name}`}
+                  >
                     ×
                   </button>
                 </span>
@@ -562,7 +702,9 @@ export function Chat() {
             </button>
             <textarea
               onPaste={(e) => {
-                const pasted = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
+                const pasted = Array.from(e.clipboardData.files).filter((f) =>
+                  f.type.startsWith("image/"),
+                );
                 if (pasted.length) {
                   e.preventDefault();
                   void addFiles(pasted);
@@ -573,7 +715,11 @@ export function Chat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKey}
-              placeholder={dictation.listening ? "Listening… speak now" : "Write what you’re thinking…"}
+              placeholder={
+                dictation.listening
+                  ? "Listening… speak now"
+                  : "Write what you’re thinking…"
+              }
               aria-label="Message"
             />
             {dictation.supported && (
@@ -588,7 +734,11 @@ export function Chat() {
               </button>
             )}
             {streaming ? (
-              <button className="send-btn active" onClick={() => abortRef.current?.abort()} aria-label="Stop">
+              <button
+                className="send-btn active"
+                onClick={() => abortRef.current?.abort()}
+                aria-label="Stop"
+              >
                 <StopIcon />
               </button>
             ) : input.trim() || files.length ? (
@@ -603,7 +753,12 @@ export function Chat() {
                 <ArrowIcon />
               </button>
             ) : conversation.supported && tts.supported ? (
-              <button className="send-btn" onClick={startVoice} aria-label="Talk to your assistant" title="Voice conversation">
+              <button
+                className="send-btn"
+                onClick={startVoice}
+                aria-label="Talk to your assistant"
+                title="Voice conversation"
+              >
                 <WaveIcon />
               </button>
             ) : (
@@ -612,7 +767,9 @@ export function Chat() {
               </button>
             )}
           </div>
-          <p className="mono-label composer-note">Shift + Enter for a new line</p>
+          <p className="mono-label composer-note">
+            Shift + Enter for a new line
+          </p>
         </div>
       </section>
 
@@ -634,9 +791,17 @@ export function Chat() {
       )}
 
       {voice !== "off" && (
-        <div className="voice-mode paper" role="dialog" aria-label="Voice conversation">
+        <div
+          className="voice-mode paper"
+          role="dialog"
+          aria-label="Voice conversation"
+        >
           <p className="mono-label">Voice conversation</p>
-          <button className={`orb ${voice}`} onClick={tapOrb} aria-label="Tap to talk or interrupt">
+          <button
+            className={`orb ${voice}`}
+            onClick={tapOrb}
+            aria-label="Tap to talk or interrupt"
+          >
             <span className="orb-ring" />
             <span className="orb-core">
               <FeatherIcon />
@@ -653,9 +818,17 @@ export function Chat() {
               }[voice]
             }
           </p>
-          <p className="mono-label">{voice === "speaking" ? "Tap the circle to interrupt" : voice === "listening" ? "Go ahead, I'm listening" : " "}</p>
+          <p className="mono-label">
+            {voice === "speaking"
+              ? "Tap the circle to interrupt"
+              : voice === "listening"
+                ? "Go ahead, I'm listening"
+                : " "}
+          </p>
           <p className="voice-heard">{voice === "listening" ? heard : ""}</p>
-          {conversation.error && <p className="chat-error">{conversation.error}</p>}
+          {conversation.error && (
+            <p className="chat-error">{conversation.error}</p>
+          )}
           <button className="end-voice" onClick={endVoice}>
             End voice
           </button>
@@ -700,7 +873,9 @@ function MessageView({
           </div>
         )}
         {m.content && <div className="bubble">{m.content}</div>}
-        <p className="mono-label who">{m.via === "voice" ? "You · voice" : "You"}</p>
+        <p className="mono-label who">
+          {m.via === "voice" ? "You · voice" : "You"}
+        </p>
       </div>
     );
   }
@@ -717,8 +892,16 @@ function MessageView({
                 <ClockIcon />
               </span>
               <div>
-                <p className="tool-title">{m.content.replace(/^⏰ Reminder: /, "")}</p>
-                <p className="mono-label">Reminder · {new Date(m.created_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
+                <p className="tool-title">
+                  {m.content.replace(/^⏰ Reminder: /, "")}
+                </p>
+                <p className="mono-label">
+                  Reminder ·{" "}
+                  {new Date(m.created_at).toLocaleString([], {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </p>
               </div>
             </div>
           </div>
@@ -728,7 +911,11 @@ function MessageView({
     );
   }
   if (m.meta.kind === "task_update" && m.meta.task_id) {
-    const t = tasks[m.meta.task_id] ?? { id: m.meta.task_id, title: "Task", status: m.meta.status ?? "running" };
+    const t = tasks[m.meta.task_id] ?? {
+      id: m.meta.task_id,
+      title: "Task",
+      status: m.meta.status ?? "running",
+    };
     return (
       <div className="msg assistant">
         <span className="avatar" aria-hidden>
@@ -760,27 +947,67 @@ function MessageView({
           {m.meta.interrupted && <p className="cut">Reply was cut off.</p>}
         </div>
         {(m.meta.tasks ?? []).map((t) => (
-          <ToolCard key={t.id} t={tasks[t.id] ?? t} description="Handed to your workforce. Updates appear here." />
+          <ToolCard
+            key={t.id}
+            t={tasks[t.id] ?? t}
+            description="Handed to your workforce. Updates appear here."
+          />
         ))}
-        {(m.meta.actions ?? []).map((a) => (
-          <div key={a.url} className="tool-card wa-card">
-            <div className="tool-head">
-              <span className="tool-icon wa-icon">
-                <ChatBubbleIcon />
-              </span>
+        {(m.meta.actions ?? []).map((a) =>
+          a.kind === "upi" ? (
+            <div key={a.url} className="tool-card wa-card upi-card">
+              <div className="tool-head">
+                <span className="tool-icon wa-icon">₹</span>
+                <div>
+                  <p className="tool-title">
+                    Pay {a.name || a.to}
+                    {a.amount ? ` ₹${a.amount}` : ""}
+                  </p>
+                  <p className="mono-label">
+                    {a.to} · Approve with your UPI PIN
+                  </p>
+                </div>
+              </div>
+              {a.text && <p className="wa-text">{a.text}</p>}
               <div>
-                <p className="tool-title">WhatsApp to {a.name || a.to || "a contact you pick"}</p>
-                <p className="mono-label">{a.to ? `${a.to} · ` : ""}Ready · tap send in WhatsApp</p>
+                <a className="wa-btn" href={a.url}>
+                  Pay in UPI app
+                </a>
+              </div>
+              <p className="muted small">
+                On a computer? Open this chat on your phone, or pay {a.to} from
+                your UPI app.
+              </p>
+            </div>
+          ) : (
+            <div key={a.url} className="tool-card wa-card">
+              <div className="tool-head">
+                <span className="tool-icon wa-icon">
+                  <ChatBubbleIcon />
+                </span>
+                <div>
+                  <p className="tool-title">
+                    WhatsApp to {a.name || a.to || "a contact you pick"}
+                  </p>
+                  <p className="mono-label">
+                    {a.to ? `${a.to} · ` : ""}Ready · tap send in WhatsApp
+                  </p>
+                </div>
+              </div>
+              <p className="wa-text">{a.text}</p>
+              <div>
+                <a
+                  className="wa-btn"
+                  href={a.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Open WhatsApp
+                </a>
               </div>
             </div>
-            <p className="wa-text">{a.text}</p>
-            <div>
-              <a className="wa-btn" href={a.url} target="_blank" rel="noreferrer noopener">
-                Open WhatsApp
-              </a>
-            </div>
-          </div>
-        ))}
+          ),
+        )}
         {(m.meta.schedules ?? []).map((sc) => (
           <div key={sc.id} className="tool-card wait">
             <div className="tool-head">
@@ -792,7 +1019,8 @@ function MessageView({
                   {sc.title}
                 </Link>
                 <p className="mono-label">
-                  {sc.kind === "reminder" ? "Reminder" : "Scheduled job"} · {sc.text}
+                  {sc.kind === "reminder" ? "Reminder" : "Scheduled job"} ·{" "}
+                  {sc.text}
                 </p>
               </div>
             </div>
@@ -812,11 +1040,19 @@ function MessageView({
           </div>
         ))}
         <div className="who-row">
-          <p className="mono-label who">{m.via === "voice" ? `${name} · voice transcript` : name}</p>
+          <p className="mono-label who">
+            {m.via === "voice" ? `${name} · voice transcript` : name}
+          </p>
           {!typing && m.content && (
             <span className="msg-tools">
-              <button onClick={() => navigator.clipboard?.writeText(m.content)}>Copy</button>
-              {onSpeak && <button onClick={onSpeak}>{speaking ? "Stop" : "Listen"}</button>}
+              <button onClick={() => navigator.clipboard?.writeText(m.content)}>
+                Copy
+              </button>
+              {onSpeak && (
+                <button onClick={onSpeak}>
+                  {speaking ? "Stop" : "Listen"}
+                </button>
+              )}
             </span>
           )}
         </div>
@@ -826,8 +1062,10 @@ function MessageView({
 }
 
 function statusLine(t: ChatTaskRef): [string, string] {
-  const waiting = t.status === "blocked" ? (t.waiting_for_connection ?? []) : [];
-  if (waiting.length) return [`Waiting for ${joinNames(waiting.map(serviceName))}`, "wait"];
+  const waiting =
+    t.status === "blocked" ? (t.waiting_for_connection ?? []) : [];
+  if (waiting.length)
+    return [`Waiting for ${joinNames(waiting.map(serviceName))}`, "wait"];
   return (
     (
       {
@@ -847,10 +1085,23 @@ function statusLine(t: ChatTaskRef): [string, string] {
   );
 }
 
-function ToolCard({ t, description }: { t: ChatTaskRef; description?: string }) {
+function ToolCard({
+  t,
+  description,
+}: {
+  t: ChatTaskRef;
+  description?: string;
+}) {
   const [label, tone] = statusLine(t);
-  const waiting = t.status === "blocked" ? (t.waiting_for_connection ?? []) : [];
-  const Icon = { done: CheckIcon, fail: BanIcon, wait: waiting.length ? PlugIcon : PenIcon, work: SparkIcon }[tone] ?? SparkIcon;
+  const waiting =
+    t.status === "blocked" ? (t.waiting_for_connection ?? []) : [];
+  const Icon =
+    {
+      done: CheckIcon,
+      fail: BanIcon,
+      wait: waiting.length ? PlugIcon : PenIcon,
+      work: SparkIcon,
+    }[tone] ?? SparkIcon;
   return (
     <div className={`tool-card ${tone}`}>
       <div className="tool-head">
@@ -871,9 +1122,13 @@ function ToolCard({ t, description }: { t: ChatTaskRef; description?: string }) 
       )}
       {(t.status === "waiting_for_approval" || waiting.length > 0) && (
         <div className="tool-actions">
-          {t.status === "waiting_for_approval" && <Link href="/approvals">Review & approve →</Link>}
+          {t.status === "waiting_for_approval" && (
+            <Link href="/approvals">Review & approve →</Link>
+          )}
           {waiting.length > 0 && (
-            <Link href={`/connections?need=${waiting.join(",")}`}>Connect {joinNames(waiting.map(serviceName))} →</Link>
+            <Link href={`/connections?need=${waiting.join(",")}`}>
+              Connect {joinNames(waiting.map(serviceName))} →
+            </Link>
           )}
         </div>
       )}
@@ -883,9 +1138,25 @@ function ToolCard({ t, description }: { t: ChatTaskRef; description?: string }) 
 
 // --- line icons (inherit the text colour) ---------------------------------------------
 
-function Svg({ children, size = 20 }: { children: React.ReactNode; size?: number }) {
+function Svg({
+  children,
+  size = 20,
+}: {
+  children: React.ReactNode;
+  size?: number;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
       {children}
     </svg>
   );
@@ -976,7 +1247,11 @@ function Attachment({ file }: { file: ChatFile }) {
   if (file.media_type === "application/pdf") {
     return <span className="file-chip">📄 {file.name}</span>;
   }
-  return url ? <img className="msg-photo" src={url} alt={file.name} /> : <span className="file-chip">🖼 {file.name}</span>;
+  return url ? (
+    <img className="msg-photo" src={url} alt={file.name} />
+  ) : (
+    <span className="file-chip">🖼 {file.name}</span>
+  );
 }
 
 const ClipIcon = () => (

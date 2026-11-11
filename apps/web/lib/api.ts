@@ -28,7 +28,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     let detail = res.statusText;
     try {
       const body = await res.json();
-      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      detail =
+        typeof body.detail === "string"
+          ? body.detail
+          : JSON.stringify(body.detail);
     } catch {
       /* non-JSON error body */
     }
@@ -39,7 +42,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const post = <T>(path: string, body?: unknown) =>
-  api<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+  api<T>(path, {
+    method: "POST",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 
 // --- Types mirroring apps/api/src/workforce_api/schemas.py ---------------------
 
@@ -123,7 +129,11 @@ export interface Approval {
 
 export interface TaskDetail extends Task {
   events: TaskEvent[];
-  plan: { understanding?: string; assumptions?: string[]; success_criteria?: string[] } | null;
+  plan: {
+    understanding?: string;
+    assumptions?: string[];
+    success_criteria?: string[];
+  } | null;
   verification: {
     passed?: boolean;
     score?: number;
@@ -164,7 +174,13 @@ export async function downloadArtifact(a: Artifact) {
 export interface Me {
   user_id: string;
   email: string | null;
-  workspace: { id: string; name: string; role: string; kill_switch: boolean; timezone: string };
+  workspace: {
+    id: string;
+    name: string;
+    role: string;
+    kill_switch: boolean;
+    timezone: string;
+  };
   /** What this person named their assistant. */
   assistant_name: string;
 }
@@ -222,7 +238,12 @@ export interface Integration {
   key: string;
   name: string;
   category: string;
-  access: "official_api" | "partner_required" | "deep_link" | "internal" | "browser";
+  access:
+    | "official_api"
+    | "partner_required"
+    | "deep_link"
+    | "internal"
+    | "browser";
   notes: string;
   tools: string[];
 }
@@ -243,7 +264,11 @@ export interface Capability {
   area: string;
   title: string;
   example: string;
-  handling: "automatic" | "asks_approval" | "owner_approval" | "you_confirm_in_app";
+  handling:
+    | "automatic"
+    | "asks_approval"
+    | "owner_approval"
+    | "you_confirm_in_app";
 }
 
 export interface Memory {
@@ -251,7 +276,13 @@ export interface Memory {
   owner_scope: "workspace" | "agent";
   agent_id: string | null;
   agent_name: string | null;
-  memory_type: "preference" | "fact" | "contact" | "instruction" | "learning" | "episode";
+  memory_type:
+    | "preference"
+    | "fact"
+    | "contact"
+    | "instruction"
+    | "learning"
+    | "episode";
   content: string;
   trusted: boolean;
   importance: number;
@@ -275,7 +306,13 @@ export interface ApprovalItem {
   recipient: string | null;
   item: string | null;
   risk_tier: number;
-  status: "pending" | "approved" | "rejected" | "expired" | "consumed" | "invalidated";
+  status:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "expired"
+    | "consumed"
+    | "invalidated";
   expires_at: string;
   created_at: string;
   decided_at: string | null;
@@ -298,15 +335,33 @@ export const ACTION_LABEL: Record<string, string> = {
 };
 
 const FIELD_LABEL: Record<string, string> = {
-  to: "To", subject: "Subject", body: "Message", message: "Message", text: "Text",
-  network: "Network", title: "Title", start: "Starts", end: "Ends", symbol: "Stock",
-  side: "Buy/Sell", quantity: "Quantity", order_type: "Order type", amount: "Amount",
-  currency: "Currency", url: "Website", fields: "Form details", offer_id: "Offer",
-  attendees: "Invites", location: "Location", description: "Notes",
-  duration_minutes: "Duration (minutes)", timezone: "Time zone",
+  to: "To",
+  subject: "Subject",
+  body: "Message",
+  message: "Message",
+  text: "Text",
+  network: "Network",
+  title: "Title",
+  start: "Starts",
+  end: "Ends",
+  symbol: "Stock",
+  side: "Buy/Sell",
+  quantity: "Quantity",
+  order_type: "Order type",
+  amount: "Amount",
+  currency: "Currency",
+  url: "Website",
+  fields: "Form details",
+  offer_id: "Offer",
+  attendees: "Invites",
+  location: "Location",
+  description: "Notes",
+  duration_minutes: "Duration (minutes)",
+  timezone: "Time zone",
 };
 
-export const fieldLabel = (k: string) => FIELD_LABEL[k] ?? k.replaceAll("_", " ");
+export const fieldLabel = (k: string) =>
+  FIELD_LABEL[k] ?? k.replaceAll("_", " ");
 
 const WHEN_FIELDS = new Set(["start", "end"]);
 
@@ -314,7 +369,13 @@ export function fieldValue(v: unknown, key?: string): string {
   if (typeof v === "string" && key && WHEN_FIELDS.has(key)) {
     const d = new Date(v);
     if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleString("en-IN", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     }
   }
   if (typeof v === "string") return v;
@@ -339,7 +400,9 @@ export function formatMoney(amount: string, currency: string | null): string {
   if (!Number.isFinite(n)) return `${amount} ${currency ?? ""}`.trim();
   try {
     return currency
-      ? new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(n)
+      ? new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(
+          n,
+        )
       : new Intl.NumberFormat("en-IN").format(n);
   } catch {
     return `${n.toLocaleString("en-IN")} ${currency ?? ""}`.trim();
@@ -347,25 +410,57 @@ export function formatMoney(amount: string, currency: string | null): string {
 }
 
 /** Payload fields to list (amount/currency are shown separately, large). */
-const FIELD_ORDER = ["title", "to", "subject", "start", "end", "duration_minutes", "timezone", "location", "attendees", "network", "message", "text", "body", "description"];
+const FIELD_ORDER = [
+  "title",
+  "to",
+  "subject",
+  "start",
+  "end",
+  "duration_minutes",
+  "timezone",
+  "location",
+  "attendees",
+  "network",
+  "message",
+  "text",
+  "body",
+  "description",
+];
 
-export function detailEntries(payload: Record<string, unknown>, hasAmount: boolean): [string, unknown][] {
-  const rank = (k: string) => (FIELD_ORDER.includes(k) ? FIELD_ORDER.indexOf(k) : FIELD_ORDER.length);
+export function detailEntries(
+  payload: Record<string, unknown>,
+  hasAmount: boolean,
+): [string, unknown][] {
+  const rank = (k: string) =>
+    FIELD_ORDER.includes(k) ? FIELD_ORDER.indexOf(k) : FIELD_ORDER.length;
   return Object.entries(payload)
     .filter(([k]) => !(hasAmount && (k === "amount" || k === "currency")))
     .sort(([a], [b]) => rank(a) - rank(b));
 }
 
 /** Text fields the owner may reword before approving (matches the API). */
-export const EDITABLE_FIELDS = new Set(["subject", "body", "message", "text", "title", "caption", "description"]);
+export const EDITABLE_FIELDS = new Set([
+  "subject",
+  "body",
+  "message",
+  "text",
+  "title",
+  "caption",
+  "description",
+]);
 
 /** Badge for a decided approval, honest about whether the action actually happened. */
-export function decidedBadge(status: string, execution: string | null): [string, "ok" | "warn" | "info" | "muted" | "bad"] {
+export function decidedBadge(
+  status: string,
+  execution: string | null,
+): [string, "ok" | "warn" | "info" | "muted" | "bad"] {
   if (status === "rejected") return ["Declined", "muted"];
   if (status === "expired") return ["Expired", "bad"];
   if (status === "invalidated") return ["Cancelled (changed)", "bad"];
   if (status === "approved") return ["Approved · running", "info"];
-  return execution === "succeeded" ? ["Approved · done", "ok"] : ["Approved · not done", "warn"];
+  return execution === "succeeded"
+    ? ["Approved · done", "ok"]
+    : ["Approved · not done", "warn"];
 }
 
 export interface ConnectedAccount {
@@ -387,9 +482,15 @@ export interface ProviderConnections {
 }
 
 /** Which connected service an approved action needs. */
-export const ACTION_SERVICE: Record<string, { provider: string; name: string }> = {
+export const ACTION_SERVICE: Record<
+  string,
+  { provider: string; name: string }
+> = {
   send_email: { provider: "gmail", name: "Gmail" },
-  calendar_create_event: { provider: "google_calendar", name: "Google Calendar" },
+  calendar_create_event: {
+    provider: "google_calendar",
+    name: "Google Calendar",
+  },
   send_whatsapp: { provider: "whatsapp", name: "WhatsApp" },
   send_telegram: { provider: "telegram", name: "Telegram" },
   post_slack: { provider: "slack", name: "Slack" },
@@ -427,7 +528,14 @@ export interface Connector {
   accounts: ConnectedAccount[];
 }
 
-export type ConnectorState = "connected" | "expired" | "ready" | "unavailable" | "soon" | "app" | "builtin";
+export type ConnectorState =
+  | "connected"
+  | "expired"
+  | "ready"
+  | "unavailable"
+  | "soon"
+  | "app"
+  | "builtin";
 
 export function connectorState(c: Connector): ConnectorState {
   if (c.auth === "builtin") return "builtin";
@@ -438,7 +546,10 @@ export function connectorState(c: Connector): ConnectorState {
   return c.available ? "ready" : "unavailable";
 }
 
-export const STATE_BADGE: Record<ConnectorState, [string, "ok" | "warn" | "info" | "muted" | "bad"]> = {
+export const STATE_BADGE: Record<
+  ConnectorState,
+  [string, "ok" | "warn" | "info" | "muted" | "bad"]
+> = {
   connected: ["Connected", "ok"],
   expired: ["Reconnect", "warn"],
   ready: ["Not connected", "muted"],
@@ -454,12 +565,17 @@ const SERVICE_NAMES: Record<string, string> = Object.fromEntries(
 
 /** Display name for a service key (gmail → Gmail, google_calendar → Google Calendar). */
 export function serviceName(key: string): string {
-  return SERVICE_NAMES[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+  return (
+    SERVICE_NAMES[key] ??
+    key.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase())
+  );
 }
 
 /** Human list: "Gmail", "Gmail and Slack", "Gmail, Slack and GitHub". */
 export function joinNames(names: string[]): string {
-  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return names.length <= 1
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 export const TIMEZONES: { zone: string; label: string }[] = [
@@ -527,7 +643,12 @@ export type ChatEvent =
 
 /** Send a message and receive the assistant's reply as it is written (Server-Sent Events). */
 export async function streamChat(
-  body: { content: string; conversation_id?: string | null; via: "text" | "voice"; attachments?: string[] },
+  body: {
+    content: string;
+    conversation_id?: string | null;
+    via: "text" | "voice";
+    attachments?: string[];
+  },
   onEvent: (e: ChatEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -536,7 +657,10 @@ export async function streamChat(
   if (!token) throw new ApiError(401, "Not signed in");
   const res = await fetch(`${API_URL}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(body),
     signal,
   });
@@ -544,7 +668,8 @@ export async function streamChat(
     let detail = res.statusText;
     try {
       const b = await res.json();
-      detail = typeof b.detail === "string" ? b.detail : JSON.stringify(b.detail);
+      detail =
+        typeof b.detail === "string" ? b.detail : JSON.stringify(b.detail);
     } catch {
       /* non-JSON error body */
     }
@@ -562,7 +687,8 @@ export async function streamChat(
       const chunk = buffer.slice(0, cut);
       buffer = buffer.slice(cut + 2);
       for (const line of chunk.split("\n")) {
-        if (line.startsWith("data: ")) onEvent(JSON.parse(line.slice(6)) as ChatEvent);
+        if (line.startsWith("data: "))
+          onEvent(JSON.parse(line.slice(6)) as ChatEvent);
       }
     }
   }
@@ -612,7 +738,11 @@ const MAX_PDF = 10 * 1024 * 1024;
 
 /** Phone photos are big: shrink to at most 2048 px as JPEG before uploading. */
 async function shrinkImage(file: File): Promise<Blob> {
-  if (file.type === "image/gif" || (file.size < 1.5 * 1024 * 1024 && file.type !== "image/heic")) return file;
+  if (
+    file.type === "image/gif" ||
+    (file.size < 1.5 * 1024 * 1024 && file.type !== "image/heic")
+  )
+    return file;
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
@@ -620,7 +750,11 @@ async function shrinkImage(file: File): Promise<Blob> {
   canvas.height = Math.round(bitmap.height * scale);
   canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   return await new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("couldn't read the photo"))), "image/jpeg", 0.85),
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("couldn't read the photo"))),
+      "image/jpeg",
+      0.85,
+    ),
   );
 }
 
@@ -636,7 +770,8 @@ function toBase64(blob: Blob): Promise<string> {
 /** Upload a photo or PDF for the assistant to read. */
 export async function uploadChatFile(file: File): Promise<ChatFile> {
   const isPdf = file.type === "application/pdf";
-  if (!isPdf && !file.type.startsWith("image/")) throw new Error(`${file.name}: send a photo or a PDF`);
+  if (!isPdf && !file.type.startsWith("image/"))
+    throw new Error(`${file.name}: send a photo or a PDF`);
   let blob: Blob = file;
   let type = file.type;
   if (!isPdf) {
@@ -646,8 +781,15 @@ export async function uploadChatFile(file: File): Promise<ChatFile> {
   if (blob.size > (isPdf ? MAX_PDF : MAX_IMAGE)) {
     throw new Error(`${file.name} is too big (max ${isPdf ? 10 : 5} MB)`);
   }
-  const name = type === "image/jpeg" && !/\.jpe?g$/i.test(file.name) ? file.name.replace(/\.[^.]+$/, "") + ".jpg" : file.name;
-  const out = await post<ChatFile>("/chat/files", { name, media_type: type, data: await toBase64(blob) });
+  const name =
+    type === "image/jpeg" && !/\.jpe?g$/i.test(file.name)
+      ? file.name.replace(/\.[^.]+$/, "") + ".jpg"
+      : file.name;
+  const out = await post<ChatFile>("/chat/files", {
+    name,
+    media_type: type,
+    data: await toBase64(blob),
+  });
   return { ...out, preview: isPdf ? undefined : URL.createObjectURL(blob) };
 }
 
@@ -661,11 +803,13 @@ export async function chatFileUrl(id: string): Promise<string> {
   return URL.createObjectURL(await res.blob());
 }
 
-/** Something ready for you to do in another app, e.g. a WhatsApp message to send. */
+/** Something ready for you to do in another app: a WhatsApp message to send, or a UPI payment
+ * to approve with your PIN. */
 export interface ChatAction {
-  kind: "whatsapp";
+  kind: "whatsapp" | "upi";
   url: string;
   to: string;
   name?: string;
   text: string;
+  amount?: string;
 }

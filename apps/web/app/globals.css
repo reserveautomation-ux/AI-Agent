@@ -565,6 +565,8 @@ button.avatar { padding: 0; cursor: pointer; }
 .tg-box p { margin: 0; }
 .artifact-img { max-width: 100%; max-height: 420px; border-radius: 12px; border: 1px solid var(--border); display: block; }
 .wa-card .wa-icon { color: #1f9d55; }
+.upi-card .wa-icon { color: var(--p-teal); font-weight: 700; font-size: 1.1rem; }
+.upi-card a.wa-btn { background: var(--p-teal); }
 .wa-text { margin: 0; white-space: pre-wrap; color: var(--p-ink); background: var(--p-bg); border-radius: 14px; padding: 10px 14px; }
 a.wa-btn {
   display: inline-block; background: #1f9d55; color: #fff; text-decoration: none; font-weight: 600;

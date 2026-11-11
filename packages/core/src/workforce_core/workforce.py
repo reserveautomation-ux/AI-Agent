@@ -231,6 +231,14 @@ _AGENT_DEFS: tuple[AgentTemplate, ...] = (
         "Prepares broker orders; every order needs your explicit approval.",
         ("market_data", "place_stock_order"),
     ),
+    A(
+        "fi_payments",
+        "Payments Agent",
+        "specialist",
+        "finance",
+        "Prepares UPI payments and bill reminders; you approve every payment in your UPI app.",
+        ("upi_link", "recall"),
+    ),
     # Software factory
     A(
         "sw_head",

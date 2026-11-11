@@ -453,6 +453,25 @@ TOOLS: tuple[ToolSpec, ...] = (
         },
     ),
     ToolSpec(
+        "upi_link",
+        "commerce",
+        "Prepare a UPI payment for the owner to approve in their own UPI app (GPay, PhonePe, "
+        "Paytm): returns a link with the payee and amount filled in; they enter their PIN. "
+        "Never guess a UPI ID. Put the link in your result.",
+        T.INTERNAL_WRITE,
+        "upi",
+        {
+            "type": "object",
+            "properties": {
+                "upi_id": {"type": "string"},
+                "name": {"type": "string"},
+                "amount": {"type": "string"},
+                "note": {"type": "string"},
+            },
+            "required": ["upi_id"],
+        },
+    ),
+    ToolSpec(
         "prepare_booking_link",
         "commerce",
         "Prepare a ride, food, movie or shopping order for you to confirm in the provider app.",

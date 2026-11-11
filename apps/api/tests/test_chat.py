@@ -107,6 +107,7 @@ def test_streams_a_reply_and_keeps_the_conversation(make_client, make_user, db):
         "remember",
         "schedule",
         "whatsapp_message",
+        "upi_payment",
         "web_search",
     }
 
@@ -488,3 +489,36 @@ def test_whatsapp_message_for_normal_whatsapp(make_client, make_user):
     conv = events[0]["id"]
     saved = client.get(f"/conversations/{conv}", headers=h).json()["messages"][-1]
     assert saved["meta"]["actions"][0]["name"] == "Mom"
+
+
+def test_upi_payment_link(make_client, make_user):
+    model = FakeChat(
+        (
+            [],
+            final(
+                [
+                    tool_block(
+                        "upi_payment",
+                        {
+                            "upi_id": "ramesh@okhdfcbank",
+                            "name": "Ramesh",
+                            "amount": "500",
+                            "note": "Milk",
+                        },
+                    ),
+                    tool_block("upi_payment", {"upi_id": "ramesh", "amount": "5"}, id_="tu_2"),
+                ],
+                stop="tool_use",
+            ),
+        ),
+        say("Pay ₹500 to Ramesh (ramesh@okhdfcbank): tap the button and enter your PIN."),
+    )
+    client = make_client(model)
+    h = auth(make_user())
+    events = send(client, h, "Pay Ramesh 500 for milk")
+    action = next(e["action"] for e in events if e["type"] == "action")
+    assert action["kind"] == "upi" and action["amount"] == "500.00"
+    assert action["url"] == "upi://pay?pa=ramesh@okhdfcbank&pn=Ramesh&am=500.00&cu=INR&tn=Milk"
+    results = model.calls[1]["messages"][-1]["content"]
+    assert "Nothing is paid until they approve with their UPI PIN" in results[0]["content"]
+    assert results[1]["is_error"] and "UPI ID" in results[1]["content"]

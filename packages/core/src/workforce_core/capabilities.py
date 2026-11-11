@@ -82,6 +82,13 @@ CAPABILITIES: tuple[Capability, ...] = (
         "WhatsApp mom that I'll be home by 8, in Hindi",
         ("whatsapp_link",),
     ),
+    C(
+        "upi",
+        "Personal assistant",
+        "Pay people by UPI",
+        "Pay Ramesh ₹500 for milk (ramesh@okhdfcbank)",
+        ("upi_link",),
+    ),
     # Inbox
     C(
         "inbox",

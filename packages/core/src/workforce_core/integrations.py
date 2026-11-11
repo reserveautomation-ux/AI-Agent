@@ -112,6 +112,14 @@ PROVIDERS: tuple[Provider, ...] = (
         "Works with any WhatsApp. Automating a personal account is against WhatsApp's terms.",
     ),
     Provider(
+        "upi",
+        "UPI payments (GPay, PhonePe, Paytm, BHIM)",
+        "commerce",
+        Access.DEEP_LINK,
+        "Standard UPI payment links: your UPI app opens with the payee and amount filled in and "
+        "you approve with your PIN. The assistant never handles money or PINs.",
+    ),
+    Provider(
         "gmail_inbox",
         "Gmail inbox",
         "communication",
