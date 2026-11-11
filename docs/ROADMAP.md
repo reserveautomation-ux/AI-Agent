@@ -65,6 +65,66 @@ Prices change; check each provider before switching something on.
 | **iPhone app on the App Store** | Publish built apps for iPhone | Apple Developer $99 a year |
 | **Google verification for Gmail reading** | Needed before more than 100 people can connect their inbox | Security assessment fee (yearly) |
 
+## Ideas from Meta's Muse agent (Sept 2026), compared with ours
+
+| Muse has | We have | What to add | Cost |
+|---|---|---|---|
+| Runs long tasks in the background with sub-agents | ✅ Chief + specialist agents, background worker | — | — |
+| Asks before sending or buying | ✅ Approvals, Face ID for money, emergency stop | — | — |
+| Name, avatar and communication style | 🟡 Name and voice | **Avatar picture and personality** (friendly / formal / Hinglish, short or detailed) | Free |
+| Read-only vs full-action access per app ("Sentinel") | 🟡 Per-service connections | **A read-only / can-act switch on every connection** | Free |
+| Goals view and project side-chats | 🟡 Tasks and chats | **Goals** ("find a 2BHK in Pune under ₹25k", "save ₹50k by March") with a plan, progress and check-ins; **Projects** grouping chats, files and tasks | Free |
+| Watch the agent's browser live | 🟡 Sandboxed browser, results only | **Live view** of what the agent is doing, with a Stop button | Free |
+| Artifacts: documents, trackers, dashboards, web pages | 🟡 Files, Docs, Sheets, websites | **Live trackers and dashboards** (expenses, job applications, habits) that update themselves | Free |
+| Its own email address | ❌ | **maya@yourdomain**: forward or CC email to your assistant and it acts on it | Free tier |
+| Phone calls to businesses | ❌ | **AI phone calls** with clear disclosure ("I'm Asha's AI assistant") and your approval | Per minute |
+| Shopping and travel through partner stores | 🟡 Prepares links | Partner checkouts where official APIs exist (Shopify stores, ONDC in India, Duffel flights) | Per use |
+| Realtime video avatar | ❌ | **Talking avatar** in voice mode (lip-synced picture) | Free (simple) to per minute (realistic) |
+| Mac app control, smart glasses, a pocket device | ❌ | **"Hey Siri / Hey Google, ask Maya"** shortcuts and home-screen widgets first; a desktop companion that controls your computer later | Free → Medium |
+
+Lessons from Muse's problems:
+- Amazon blocked Muse for browsing without saying it was an AI. Ours must always identify itself
+  when browsing or calling, and never store passwords or card numbers (it doesn't today).
+- Muse's shared chats leaked. If we add sharing, use unguessable links that expire, and let
+  people revoke them.
+
+## More ideas
+
+**Easier to use**
+- **Share to your assistant from any app** (Android/iPhone share sheet): a screenshot,
+  link, PDF or WhatsApp message becomes "do something with this". Free; high value.
+- **Proactive nudges**: "Your flight is tomorrow and check-in is open", "Electricity bill due
+  Friday", "Rahul's birthday today". Built from your mail, calendar and memory. Free.
+- **Meeting notes**: record a meeting and get the transcript, summary and action items as
+  tasks and reminders. Speech-to-text runs on the device for free.
+- **Hindi and regional-language app screens**, not just voice. Free.
+- **Data controls**: export everything, delete everything, and see what it remembers. Free.
+
+**India-first**
+- **UPI payment links**: "Pay ₹500 to Ramesh". Opens GPay, PhonePe or Paytm with the
+  amount filled in; you confirm. Free; works like the WhatsApp links.
+- **Bills and renewals**: due dates read from email and SMS, with reminders before late
+  fees (insurance, rent, EMIs). Free.
+- **Grocery and pharmacy lists**: list → Blinkit, Zepto, BigBasket or 1mg, ready to order. Free.
+- **Trains and flights**: PNR and flight status, itinerary from booking emails into your
+  calendar automatically. Free tier.
+- **For small shops and freelancers**: GST invoices, payment follow-ups on WhatsApp, a
+  simple customer list, and a daily sales summary. Free.
+
+**Life admin**
+- **Document reminders**: passport, licence, insurance and PUC expiry (dates only, never the
+  documents' numbers). Free.
+- **Health**: medicine reminders, doctor appointment links, lab reports summarised in plain
+  language (not medical advice). Free.
+- **Job search**: tailor your CV per job, track applications, prepare for interviews. Free.
+- **Learning**: a tutor for children or language practice in voice mode. Claude usage.
+- **Family workspace**: shared grocery lists, a family calendar and chores. Free.
+
+**Workforce power**
+- **Skills / templates**: one-tap setups such as "Shop owner", "Student", "Freelancer",
+  "Home manager". Free.
+- **Usage and cost dashboard** per person (needed for billing). Free.
+
 ## Never automatic, by design
 
 Sending, booking, paying, trading and publishing always wait for your approval. Money
