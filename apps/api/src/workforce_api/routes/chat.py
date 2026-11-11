@@ -6,15 +6,16 @@ final "done" (or "error"). Conversations are private to the person.
 """
 
 import asyncio
+import base64
 import json
 from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 from workforce_core.schedules import create_schedule
 
 from .. import chat as engine
@@ -28,16 +29,42 @@ router = APIRouter(tags=["chat"])
 
 
 class ChatIn(BaseModel):
-    content: str = Field(min_length=1, max_length=8000)
+    content: str = Field(default="", max_length=8000)
     conversation_id: str | None = None
     via: Literal["text", "voice"] = "text"
+    attachments: list[str] = Field(default_factory=list, max_length=5)  # chat_files ids
 
-    @field_validator("content")
-    @classmethod
-    def not_blank(cls, v: str) -> str:
-        if not v.strip():
+    @model_validator(mode="after")
+    def not_blank(self) -> "ChatIn":
+        self.content = self.content.strip()
+        if not self.content and not self.attachments:
             raise ValueError("message must not be blank")
-        return v.strip()
+        return self
+
+
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+MAX_IMAGE = 5 * 1024 * 1024  # Claude's limit per image
+MAX_PDF = 10 * 1024 * 1024
+MAGIC = {
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG",),
+    "image/gif": (b"GIF87a", b"GIF89a"),
+    "image/webp": (b"RIFF",),
+    "application/pdf": (b"%PDF",),
+}
+
+
+class FileIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    media_type: str
+    data: str = Field(min_length=4, max_length=15_000_000)  # base64
+
+
+class FileOut(BaseModel):
+    id: str
+    name: str
+    media_type: str
+    size_bytes: int
 
 
 class ConversationOut(BaseModel):
@@ -234,6 +261,20 @@ async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, set
             "Today's chat limit is used up. Tasks still run; chat is back within 24 hours.",
         )
 
+    attachments: list[dict] = []
+    if body.attachments:
+        found = await (
+            await conn.execute(
+                "select id::text, name, media_type from public.chat_files"
+                " where id::text = any(%s) and user_id = %s and workspace_id = %s",
+                (body.attachments, user.user_id, user.workspace_id),
+            )
+        ).fetchall()
+        by_id = {f["id"]: f for f in found}
+        if len(by_id) != len(set(body.attachments)):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "attachment not found")
+        attachments = [dict(by_id[i]) for i in dict.fromkeys(body.attachments)]
+
     async with conn.transaction():
         if body.conversation_id:
             conv = await _own_conversation(conn, user, body.conversation_id)
@@ -242,13 +283,24 @@ async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, set
                 await conn.execute(
                     "insert into public.conversations (workspace_id, user_id, title)"
                     " values (%s, %s, %s) returning id::text, title, created_at, updated_at",
-                    (user.workspace_id, user.user_id, _title(body.content)),
+                    (
+                        user.workspace_id,
+                        user.user_id,
+                        _title(body.content or attachments[0]["name"]),
+                    ),
                 )
             ).fetchone()
         await conn.execute(
-            "insert into public.chat_messages (conversation_id, workspace_id, role, content, via)"
-            " values (%s, %s, 'user', %s, %s)",
-            (conv["id"], user.workspace_id, body.content, body.via),
+            "insert into public.chat_messages"
+            " (conversation_id, workspace_id, role, content, via, meta)"
+            " values (%s, %s, 'user', %s, %s, %s)",
+            (
+                conv["id"],
+                user.workspace_id,
+                body.content,
+                body.via,
+                Jsonb({"attachments": attachments} if attachments else {}),
+            ),
         )
         await conn.execute(
             "update public.conversations set updated_at = now() where id = %s", (conv["id"],)
@@ -268,7 +320,7 @@ async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, set
                     workspace_id=user.workspace_id,
                     conversation_id=conv["id"],
                     who=who,
-                    query=body.content,
+                    query=body.content or " ".join(a["name"] for a in attachments),
                     voice=body.via == "voice",
                     name=name,
                 )
@@ -400,3 +452,68 @@ async def cancel_schedule(schedule_id: str, user: UserDep, conn: ConnDep) -> Sch
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "reminder not found")
     return ScheduleOut(**row)
+
+
+# --- photos & PDFs ---------------------------------------------------------------------------
+
+
+@router.post("/chat/files", response_model=FileOut, status_code=status.HTTP_201_CREATED)
+async def upload_file(body: FileIn, user: UserDep, conn: ConnDep) -> FileOut:
+    """Attach a photo (JPEG, PNG, GIF, WebP up to 5 MB) or PDF (up to 10 MB) to a chat."""
+    kind = body.media_type.lower()
+    if kind not in MAGIC:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Send a photo (JPEG, PNG, GIF, WebP) or a PDF."
+        )
+    try:
+        data = base64.b64decode(body.data.split(",", 1)[-1], validate=True)
+    except ValueError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "file data isn't base64"
+        ) from exc
+    limit = MAX_IMAGE if kind in IMAGE_TYPES else MAX_PDF
+    if not data or len(data) > limit:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            f"That file is too big (max {limit // (1024 * 1024)} MB).",
+        )
+    if not data.startswith(MAGIC[kind]):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "That file doesn't look like the type it says."
+        )
+    today = await (
+        await conn.execute(
+            "select count(*) as n from public.chat_files where user_id = %s"
+            " and created_at > now() - interval '1 day'",
+            (user.user_id,),
+        )
+    ).fetchone()
+    if today["n"] >= 200:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many files today.")
+    name = " ".join(body.name.replace("/", " ").replace("\\", " ").split())[:200] or "file"
+    row = await (
+        await conn.execute(
+            "insert into public.chat_files (workspace_id, user_id, name, media_type, size_bytes,"
+            " content) values (%s, %s, %s, %s, %s, %s) returning id::text",
+            (user.workspace_id, user.user_id, name, kind, len(data), data),
+        )
+    ).fetchone()
+    return FileOut(id=row["id"], name=name, media_type=kind, size_bytes=len(data))
+
+
+@router.get("/chat/files/{file_id}")
+async def get_file(file_id: str, user: UserDep, conn: ConnDep) -> Response:
+    row = await (
+        await conn.execute(
+            "select name, media_type, content from public.chat_files"
+            " where id::text = %s and user_id = %s and workspace_id = %s",
+            (file_id, user.user_id, user.workspace_id),
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "file not found")
+    return Response(
+        bytes(row["content"]),
+        media_type=row["media_type"],
+        headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"},
+    )

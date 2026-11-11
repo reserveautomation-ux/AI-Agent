@@ -541,3 +541,23 @@ button.avatar { padding: 0; cursor: pointer; }
 .ok-dot { color: var(--ok); }
 .ok-dot::before { content: "● "; }
 @media (max-width: 520px) { .engine-pick { grid-template-columns: 1fr; } }
+/* photos & PDFs */
+.attach-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px 8px; }
+.attach-chip {
+  display: inline-flex; align-items: center; gap: 8px; background: var(--p-card); border: 1px solid var(--p-line);
+  border-radius: 14px; padding: 4px 6px 4px 4px; max-width: 220px;
+}
+.attach-chip img { width: 40px; height: 40px; object-fit: cover; border-radius: 10px; }
+.attach-chip .pdf {
+  width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-family: var(--font-mono);
+  font-size: 0.7rem; letter-spacing: 0.1em; background: var(--p-terra-soft); color: var(--p-terra);
+}
+.attach-name { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.attach-chip button { background: none; border: 0; color: var(--p-muted); padding: 2px 6px; font-size: 1rem; }
+.icon-plain.attach-btn { height: 52px; color: var(--p-ink); margin-left: -12px; }
+.msg-files { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; max-width: 82%; }
+.msg-photo { max-width: 240px; max-height: 240px; border-radius: 18px; border: 1px solid var(--p-line); object-fit: cover; }
+.file-chip {
+  display: inline-block; background: var(--p-card); border: 1px solid var(--p-line); border-radius: 14px;
+  padding: 8px 12px; font-size: 0.9rem;
+}

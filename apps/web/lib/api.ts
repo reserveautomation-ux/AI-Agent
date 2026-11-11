@@ -486,6 +486,7 @@ export interface ChatMessage {
     tasks?: ChatTaskRef[];
     memories?: string[];
     schedules?: ScheduleRef[];
+    attachments?: ChatFile[];
     interrupted?: boolean;
   };
   created_at: string;
@@ -507,7 +508,7 @@ export type ChatEvent =
 
 /** Send a message and receive the assistant's reply as it is written (Server-Sent Events). */
 export async function streamChat(
-  body: { content: string; conversation_id?: string | null; via: "text" | "voice" },
+  body: { content: string; conversation_id?: string | null; via: "text" | "voice"; attachments?: string[] },
   onEvent: (e: ChatEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -577,3 +578,66 @@ export const REPEAT_LABEL: Record<string, string> = {
   weekly: "Every week",
   monthly: "Every month",
 };
+
+export interface ChatFile {
+  id: string;
+  name: string;
+  media_type: string;
+  size_bytes?: number;
+  /** Local preview while composing (not from the server). */
+  preview?: string;
+}
+
+const MAX_IMAGE = 5 * 1024 * 1024;
+const MAX_PDF = 10 * 1024 * 1024;
+
+/** Phone photos are big: shrink to at most 2048 px as JPEG before uploading. */
+async function shrinkImage(file: File): Promise<Blob> {
+  if (file.type === "image/gif" || (file.size < 1.5 * 1024 * 1024 && file.type !== "image/heic")) return file;
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return await new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("couldn't read the photo"))), "image/jpeg", 0.85),
+  );
+}
+
+function toBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",", 2)[1] ?? "");
+    r.onerror = () => reject(new Error("couldn't read the file"));
+    r.readAsDataURL(blob);
+  });
+}
+
+/** Upload a photo or PDF for the assistant to read. */
+export async function uploadChatFile(file: File): Promise<ChatFile> {
+  const isPdf = file.type === "application/pdf";
+  if (!isPdf && !file.type.startsWith("image/")) throw new Error(`${file.name}: send a photo or a PDF`);
+  let blob: Blob = file;
+  let type = file.type;
+  if (!isPdf) {
+    blob = await shrinkImage(file);
+    type = blob.type || file.type;
+  }
+  if (blob.size > (isPdf ? MAX_PDF : MAX_IMAGE)) {
+    throw new Error(`${file.name} is too big (max ${isPdf ? 10 : 5} MB)`);
+  }
+  const name = type === "image/jpeg" && !/\.jpe?g$/i.test(file.name) ? file.name.replace(/\.[^.]+$/, "") + ".jpg" : file.name;
+  const out = await post<ChatFile>("/chat/files", { name, media_type: type, data: await toBase64(blob) });
+  return { ...out, preview: isPdf ? undefined : URL.createObjectURL(blob) };
+}
+
+/** Load an attached photo (needs the sign-in token, so it can't be a plain <img src>). */
+export async function chatFileUrl(id: string): Promise<string> {
+  const { data } = await supabase().auth.getSession();
+  const res = await fetch(`${API_URL}/chat/files/${id}`, {
+    headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+  });
+  if (!res.ok) throw new ApiError(res.status, "file not found");
+  return URL.createObjectURL(await res.blob());
+}

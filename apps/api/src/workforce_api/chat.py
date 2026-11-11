@@ -10,6 +10,7 @@ It remembers lasting facts the person shares (``remember``) and gets relevant
 memories, their connected services and recent tasks with every message.
 """
 
+import base64
 import json
 import time
 from collections.abc import AsyncIterator
@@ -54,6 +55,9 @@ the workforce finds options and prepares a link; they confirm and pay in that ap
 - For anything at a later time or on repeat ("remind me at 6", "every Monday 9am send me \
 my unread mail"), call schedule: kind "reminder" just notifies them; kind "task" has the \
 workforce do the job at that time. Use their local time from "Now" above.
+- They can attach photos and PDFs (bills, forms, screenshots, documents); read them \
+carefully. The workforce can't see attachments: when you start a task about one, copy every \
+detail it needs into the objective.
 - When they tell you a lasting fact or preference about themselves (name, family, \
 work, likes, how they want things done), call remember. Never store passwords, OTPs, \
 card or bank numbers.
@@ -192,26 +196,72 @@ async def _recent_tasks(conn: AsyncConnection, conversation_id: str) -> str:
     )
 
 
+ATTACH_TURNS = 3  # how many recent messages with files get the files themselves
+
+
+def _file_block(f: dict[str, Any]) -> dict[str, Any]:
+    data = base64.b64encode(bytes(f["content"])).decode()
+    if f["media_type"] == "application/pdf":
+        return {
+            "type": "document",
+            "source": {"type": "base64", "media_type": "application/pdf", "data": data},
+            "title": f["name"],
+        }
+    return {
+        "type": "image",
+        "source": {"type": "base64", "media_type": f["media_type"], "data": data},
+    }
+
+
 async def history(conn: AsyncConnection, conversation_id: str) -> list[dict[str, Any]]:
-    """Recent messages as alternating user/assistant turns (text only)."""
+    """Recent messages as alternating user/assistant turns. Photos and PDFs from the last
+    few messages are included so the assistant can read them; older ones are named only."""
     rows = await (
         await conn.execute(
-            "select role, content from (select role, content, created_at from"
+            "select role, content, meta from (select role, content, meta, created_at from"
             " public.chat_messages where conversation_id = %s order by created_at desc"
             " limit %s) m order by created_at",
             (conversation_id, HISTORY),
         )
     ).fetchall()
+    with_files = [r for r in rows if r["role"] == "user" and (r["meta"] or {}).get("attachments")]
+    recent = {id(r) for r in with_files[-ATTACH_TURNS:]}
+    wanted = [a["id"] for r in with_files[-ATTACH_TURNS:] for a in r["meta"]["attachments"]]
+    files: dict[str, dict] = {}
+    if wanted:
+        for f in await (
+            await conn.execute(
+                "select id::text, name, media_type, content from public.chat_files"
+                " where id::text = any(%s)",
+                (wanted,),
+            )
+        ).fetchall():
+            files[f["id"]] = f
     turns: list[dict[str, Any]] = []
     for r in rows:
-        if not r["content"].strip():
+        blocks: list[dict[str, Any]] = []
+        for a in (r["meta"] or {}).get("attachments", []) if r["role"] == "user" else []:
+            f = files.get(a["id"]) if id(r) in recent else None
+            if f:
+                blocks.append(_file_block(f))
+            else:
+                kind = "PDF" if a.get("media_type") == "application/pdf" else "photo"
+                blocks.append(
+                    {"type": "text", "text": f"[Earlier attached {kind}: {a.get('name')}]"}
+                )
+        if r["content"].strip():
+            blocks.append({"type": "text", "text": r["content"]})
+        if not blocks:
             continue
         if turns and turns[-1]["role"] == r["role"]:
-            turns[-1]["content"] += "\n\n" + r["content"]
+            turns[-1]["content"].extend(blocks)
         else:
-            turns.append({"role": r["role"], "content": r["content"]})
+            turns.append({"role": r["role"], "content": blocks})
     while turns and turns[0]["role"] != "user":
         turns.pop(0)
+    for t in turns:  # plain text turns stay plain strings
+        if all(b["type"] == "text" for b in t["content"]):
+            t["content"] = "\n\n".join(b["text"] for b in t["content"])
     return turns
 
 

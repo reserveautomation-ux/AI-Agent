@@ -6,11 +6,14 @@ import { Markdown } from "@/components/Markdown";
 import {
   api,
   ApiError,
+  chatFileUrl,
   post,
   joinNames,
   serviceName,
   streamChat,
+  uploadChatFile,
   type ChatMessage,
+  type ChatFile,
   type ChatTaskRef,
   type Conversation,
   type ConversationDetail,
@@ -155,9 +158,14 @@ export function Chat() {
   }, [activeId, busyTasks, streaming, readAloud, lang, speak]);
 
   const send = useCallback(
-    async (text: string, via: "text" | "voice" = "text", onDelta?: (t: string) => void): Promise<string> => {
+    async (
+      text: string,
+      via: "text" | "voice" = "text",
+      onDelta?: (t: string) => void,
+      atts: ChatFile[] = [],
+    ): Promise<string> => {
       const content = text.trim();
-      if (!content || streaming) return "";
+      if ((!content && !atts.length) || streaming) return "";
       setError(null);
       setInput("");
       stopSpeaking();
@@ -165,7 +173,7 @@ export function Chat() {
       const replyId = `pending-${Date.now()}`;
       setMessages((m) => [
         ...m,
-        { id: `u-${Date.now()}`, role: "user", content, via, meta: {}, created_at: now },
+        { id: `u-${Date.now()}`, role: "user", content, via, meta: atts.length ? { attachments: atts } : {}, created_at: now },
         { id: replyId, role: "assistant", content: "", via, meta: { kind: "reply", tasks: [] }, created_at: now },
       ]);
       setStreaming(true);
@@ -176,7 +184,7 @@ export function Chat() {
         setMessages((ms) => ms.map((m) => (m.id === replyId ? fn(m) : m)));
       try {
         await streamChat(
-          { content, conversation_id: activeRef.current, via },
+          { content, conversation_id: activeRef.current, via, attachments: atts.map((a) => a.id) },
           (e) => {
             if (e.type === "conversation") {
               if (!activeRef.current) {
@@ -222,7 +230,12 @@ export function Chat() {
   );
 
   /** Send, and (in voice mode or with read-aloud on) speak the reply while it streams in. */
-  const sendSpoken = async (text: string, via: "text" | "voice", onSpoken?: () => void): Promise<string> => {
+  const sendSpoken = async (
+    text: string,
+    via: "text" | "voice",
+    onSpoken?: () => void,
+    atts: ChatFile[] = [],
+  ): Promise<string> => {
     const talk = via === "voice" || readAloud;
     let begun = false;
     const reply = await send(
@@ -238,6 +251,7 @@ export function Chat() {
             tts.push(t);
           }
         : undefined,
+      atts,
     );
     if (!talk) return reply;
     if (!reply) {
@@ -250,6 +264,30 @@ export function Chat() {
       tts.speak(reply, lang, via === "voice" ? "voice" : "last", onSpoken);
     }
     return reply;
+  };
+
+  // --- photos & PDFs ---------------------------------------------------------------
+  const [files, setFiles] = useState<ChatFile[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const addFiles = async (list: File[]) => {
+    for (const f of list.slice(0, 5 - files.length)) {
+      setUploading((n) => n + 1);
+      try {
+        const up = await uploadChatFile(f);
+        setFiles((fs) => [...fs, up].slice(0, 5));
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+  };
+  const sendTyped = () => {
+    if (uploading) return;
+    const atts = files;
+    setFiles([]);
+    void sendSpoken(input, "text", undefined, atts);
   };
 
   // --- typing + dictation ---------------------------------------------------------
@@ -267,7 +305,7 @@ export function Chat() {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       if (dictation.listening) dictation.stop();
-      void sendSpoken(input, "text");
+      void sendTyped();
     }
   };
 
@@ -485,8 +523,49 @@ export function Chat() {
         {(error || dictation.error) && <p className="chat-error">{error ?? dictation.error}</p>}
 
         <div className="composer-wrap">
+          {(files.length > 0 || uploading > 0) && (
+            <div className="attach-row">
+              {files.map((f) => (
+                <span key={f.id} className="attach-chip">
+                  {f.preview ? <img src={f.preview} alt="" /> : <span className="pdf">PDF</span>}
+                  <span className="attach-name">{f.name}</span>
+                  <button onClick={() => setFiles((fs) => fs.filter((x) => x.id !== f.id))} aria-label={`Remove ${f.name}`}>
+                    ×
+                  </button>
+                </span>
+              ))}
+              {uploading > 0 && <span className="mono-label">Uploading…</span>}
+            </div>
+          )}
           <div className={`composer ${dictation.listening ? "listening" : ""}`}>
+            <input
+              ref={fileRef}
+              type="file"
+              hidden
+              multiple
+              accept="image/jpeg,image/png,image/gif,image/webp,image/heic,application/pdf"
+              onChange={(e) => {
+                void addFiles(Array.from(e.target.files ?? []));
+                e.target.value = "";
+              }}
+            />
+            <button
+              className="icon-plain attach-btn"
+              onClick={() => fileRef.current?.click()}
+              aria-label="Attach a photo or PDF"
+              title="Attach a photo or PDF"
+              disabled={files.length >= 5}
+            >
+              <ClipIcon />
+            </button>
             <textarea
+              onPaste={(e) => {
+                const pasted = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
+                if (pasted.length) {
+                  e.preventDefault();
+                  void addFiles(pasted);
+                }
+              }}
               ref={inputRef}
               rows={1}
               value={input}
@@ -510,12 +589,12 @@ export function Chat() {
               <button className="send-btn active" onClick={() => abortRef.current?.abort()} aria-label="Stop">
                 <StopIcon />
               </button>
-            ) : input.trim() ? (
+            ) : input.trim() || files.length ? (
               <button
                 className="send-btn active"
                 onClick={() => {
                   if (dictation.listening) dictation.stop();
-                  void sendSpoken(input, "text");
+                  void sendTyped();
                 }}
                 aria-label="Send"
               >
@@ -611,7 +690,14 @@ function MessageView({
   if (m.role === "user") {
     return (
       <div className="msg user">
-        <div className="bubble">{m.content}</div>
+        {(m.meta.attachments ?? []).length > 0 && (
+          <div className="msg-files">
+            {m.meta.attachments!.map((a) => (
+              <Attachment key={a.id} file={a} />
+            ))}
+          </div>
+        )}
+        {m.content && <div className="bubble">{m.content}</div>}
         <p className="mono-label who">{m.via === "voice" ? "You · voice" : "You"}</p>
       </div>
     );
@@ -846,6 +932,35 @@ const PenIcon = () => (
 const SparkIcon = () => (
   <Svg>
     <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />
+  </Svg>
+);
+/** An attached photo (loaded with the sign-in token) or a PDF chip. */
+function Attachment({ file }: { file: ChatFile }) {
+  const [url, setUrl] = useState<string | null>(file.preview ?? null);
+  useEffect(() => {
+    if (file.preview || file.media_type === "application/pdf") return;
+    let gone = false;
+    let made: string | null = null;
+    chatFileUrl(file.id)
+      .then((u) => {
+        made = u;
+        if (!gone) setUrl(u);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [file.id, file.preview, file.media_type]);
+  if (file.media_type === "application/pdf") {
+    return <span className="file-chip">📄 {file.name}</span>;
+  }
+  return url ? <img className="msg-photo" src={url} alt={file.name} /> : <span className="file-chip">🖼 {file.name}</span>;
+}
+
+const ClipIcon = () => (
+  <Svg size={22}>
+    <path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />
   </Svg>
 );
 const ClockIcon = () => (

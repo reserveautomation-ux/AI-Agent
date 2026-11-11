@@ -365,3 +365,86 @@ def test_set_and_cancel_reminders_from_chat(make_client, make_user, db):
     sid = made[0]["id"]
     assert client.post(f"/schedules/{sid}/cancel", headers=auth(make_user())).status_code == 404
     assert client.post(f"/schedules/{sid}/cancel", headers=h).json()["active"] is False
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+PDF = b"%PDF-1.7\n" + b"x" * 40
+
+
+def upload(client, h, name, kind, data):
+    import base64 as b64
+
+    return client.post(
+        "/chat/files",
+        json={"name": name, "media_type": kind, "data": b64.b64encode(data).decode()},
+        headers=h,
+    )
+
+
+def test_photos_and_pdfs_reach_the_assistant(make_client, make_user):
+    model = FakeChat(
+        say("That's an electricity bill for ₹1,240."),
+        say("Ok."),
+        say("Ok."),
+        say("Ok."),
+        say("Ok."),
+    )
+    client = make_client(model)
+    h = auth(make_user())
+    photo = upload(client, h, "bill.png", "image/png", PNG).json()
+    doc = upload(client, h, "form.pdf", "application/pdf", PDF).json()
+    assert photo["media_type"] == "image/png" and photo["size_bytes"] == len(PNG)
+
+    events = send_json(
+        client, h, {"content": "What is this?", "attachments": [photo["id"], doc["id"]]}
+    )
+    conv = events[0]["id"]
+    blocks = model.calls[0]["messages"][-1]["content"]
+    assert [b["type"] for b in blocks] == ["image", "document", "text"]
+    assert blocks[0]["source"]["media_type"] == "image/png" and blocks[1]["title"] == "form.pdf"
+    assert "can attach photos and PDFs" in model.calls[0]["system"]
+
+    # A photo on its own starts a chat named after it.
+    events = send_json(client, h, {"attachments": [photo["id"]]})
+    assert events[0]["title"] == "bill.png"
+
+    # Later turns: only the last few messages carry the files themselves.
+    for _ in range(3):  # three newer messages with files push the first one out
+        send_json(
+            client, h, {"content": "more", "conversation_id": conv, "attachments": [photo["id"]]}
+        )
+    first_user = model.calls[-1]["messages"][0]["content"]
+    assert (
+        "[Earlier attached photo: bill.png]" in first_user
+        and "[Earlier attached PDF: form.pdf]" in first_user
+    )
+
+    detail = client.get(f"/conversations/{conv}", headers=h).json()
+    assert [a["name"] for a in detail["messages"][0]["meta"]["attachments"]] == [
+        "bill.png",
+        "form.pdf",
+    ]
+    got = client.get(f"/chat/files/{photo['id']}", headers=h)
+    assert (
+        got.status_code == 200 and got.content == PNG and got.headers["content-type"] == "image/png"
+    )
+
+
+def test_file_rules(make_client, make_user):
+    client = make_client(FakeChat(say("x")))
+    h, other = auth(make_user()), auth(make_user())
+    assert upload(client, h, "a.exe", "application/x-msdownload", b"MZ...").status_code == 415
+    assert upload(client, h, "fake.png", "image/png", b"not a png at all").status_code == 422
+    big = b"\x89PNG" + b"0" * (5 * 1024 * 1024)
+    assert upload(client, h, "big.png", "image/png", big).status_code == 413
+    mine = upload(client, h, "bill.png", "image/png", PNG).json()
+    assert client.get(f"/chat/files/{mine['id']}", headers=other).status_code == 404
+    r = client.post("/chat", json={"content": "x", "attachments": [mine["id"]]}, headers=other)
+    assert r.status_code == 404
+    assert client.post("/chat", json={"content": "  "}, headers=h).status_code == 422
+
+
+def send_json(client, h, body):
+    with client.stream("POST", "/chat", json={"via": "text", **body}, headers=h) as r:
+        assert r.status_code == 200, r.read()
+        return [json.loads(line[6:]) for line in r.iter_lines() if line.startswith("data: ")]
