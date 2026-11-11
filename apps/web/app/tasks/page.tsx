@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Schedules } from "@/components/Schedules";
 import { StatusBadge } from "@/components/StatusBadge";
 import { api, post, type Capability, type Task } from "@/lib/api";
 import { useSpeech, VOICE_LANGUAGES } from "@/lib/useSpeech";
@@ -186,6 +187,8 @@ export default function CommandCenter() {
         {voice.error && <p className="error-text">{voice.error}</p>}
         {error && <p className="error-text">{error}</p>}
       </form>
+
+      <Schedules />
 
       <h2>Tasks</h2>
       {tasks === null ? (

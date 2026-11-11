@@ -120,10 +120,22 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "set_reminder",
         "personal",
-        "Remind you at a time (in-app, email or push).",
+        "Remind the owner at a time (phone notification + chat). 'at' is their local time like "
+        "2026-11-20T16:00; repeat: none, daily, weekdays, weekly or monthly.",
         T.INTERNAL_WRITE,
         "internal",
-        _obj(message=_S, at=_S),
+        {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "at": {"type": "string"},
+                "repeat": {
+                    "type": "string",
+                    "enum": ["none", "daily", "weekdays", "weekly", "monthly"],
+                },
+            },
+            "required": ["message", "at"],
+        },
     ),
     ToolSpec(
         "watch",

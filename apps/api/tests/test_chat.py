@@ -102,7 +102,7 @@ def test_streams_a_reply_and_keeps_the_conversation(make_client, make_user, db):
     assert "You are AI Assistant, the personal AI assistant of owner@example.com" in p["system"]
     assert "Connected services: none yet" in p["system"] and "Gmail" in p["system"]
     assert p["thinking"] == {"type": "adaptive"} and p["output_config"] == {"effort": "low"}
-    assert {t["name"] for t in p["tools"]} == {"start_task", "remember", "web_search"}
+    assert {t["name"] for t in p["tools"]} == {"start_task", "remember", "schedule", "web_search"}
 
     send(client, h, "Thanks", conversation_id=conv)
     assert [m["role"] for m in model.calls[1]["messages"]] == ["user", "assistant", "user"]
@@ -311,3 +311,57 @@ def test_name_your_assistant(make_client, make_user):
         assert client.post("/me/assistant", json={"name": bad}, headers=h).status_code == 422
     # Each person names their own: someone else still has the default.
     assert client.get("/me", headers=auth(make_user())).json()["assistant_name"] == "AI Assistant"
+
+
+def test_set_and_cancel_reminders_from_chat(make_client, make_user, db):
+    model = FakeChat(
+        (
+            [],
+            final(
+                [
+                    tool_block(
+                        "schedule",
+                        {"kind": "reminder", "what": "Call mom", "at": "2027-01-05T18:00"},
+                    ),
+                    tool_block(
+                        "schedule",
+                        {
+                            "kind": "task",
+                            "what": "Summarise my unread email",
+                            "at": "2027-01-05T09:00",
+                            "repeat": "weekdays",
+                            "title": "Inbox summary",
+                        },
+                        id_="tu_2",
+                    ),
+                    tool_block(
+                        "schedule",
+                        {"kind": "reminder", "what": "x", "at": "2001-01-01T09:00"},
+                        id_="tu_3",
+                    ),
+                ],
+                stop="tool_use",
+            ),
+        ),
+        say("Done: I'll remind you and summarise your inbox every weekday."),
+    )
+    client = make_client(model)
+    h = auth(make_user())
+    events = send(client, h, "Remind me to call mom at 6pm on 5 Jan and summarise my mail weekdays")
+    made = [e["schedule"] for e in events if e["type"] == "schedule"]
+    assert [m["kind"] for m in made] == ["reminder", "task"]
+    assert made[1]["text"].startswith("every weekday at 09:00, starting")
+    results = model.calls[1]["messages"][-1]["content"]
+    assert results[2]["is_error"] and "already passed" in results[2]["content"]
+    conv = events[0]["id"]
+    reply = client.get(f"/conversations/{conv}", headers=h).json()["messages"][-1]
+    assert [s["title"] for s in reply["meta"]["schedules"]] == ["Call mom", "Inbox summary"]
+
+    listed = client.get("/schedules", headers=h).json()
+    assert {s["title"] for s in listed} == {"Call mom", "Inbox summary"}
+    assert db.execute(
+        "select conversation_id::text, local_time, timezone from schedules where title = 'Call mom'"
+    ).fetchone() == (conv, "18:00", "Asia/Kolkata")
+    sid = made[0]["id"]
+    assert client.post(f"/schedules/{sid}/cancel", headers=auth(make_user())).status_code == 404
+    assert client.post(f"/schedules/{sid}/cancel", headers=h).json()["active"] is False

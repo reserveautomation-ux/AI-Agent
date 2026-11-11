@@ -479,12 +479,13 @@ export interface ChatMessage {
   content: string;
   via: "text" | "voice";
   meta: {
-    kind?: "reply" | "task_update";
+    kind?: "reply" | "task_update" | "reminder";
     task_id?: string;
     status?: TaskStatus;
     waiting_for_connection?: string[];
     tasks?: ChatTaskRef[];
     memories?: string[];
+    schedules?: ScheduleRef[];
     interrupted?: boolean;
   };
   created_at: string;
@@ -500,6 +501,7 @@ export type ChatEvent =
   | { type: "text"; text: string }
   | { type: "task"; task: ChatTaskRef }
   | { type: "memory"; content: string }
+  | { type: "schedule"; schedule: ScheduleRef }
   | { type: "done"; message_id: string; text: string }
   | { type: "error"; message: string };
 
@@ -545,3 +547,33 @@ export async function streamChat(
     }
   }
 }
+
+export interface ScheduleRef {
+  id: string;
+  title: string;
+  kind: "reminder" | "task";
+  repeat: string;
+  next_run_at: string;
+  text: string;
+}
+
+export interface Schedule {
+  id: string;
+  kind: "reminder" | "task";
+  title: string;
+  what: string;
+  repeat: "none" | "daily" | "weekdays" | "weekly" | "monthly";
+  timezone: string;
+  next_run_at: string | null;
+  active: boolean;
+  runs: number;
+  last_run_at: string | null;
+}
+
+export const REPEAT_LABEL: Record<string, string> = {
+  none: "Once",
+  daily: "Every day",
+  weekdays: "Every weekday",
+  weekly: "Every week",
+  monthly: "Every month",
+};

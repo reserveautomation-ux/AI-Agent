@@ -19,6 +19,7 @@ from workforce_core.approvals import binding_for, canonical_json
 from workforce_core.db import record_audit
 from workforce_core.memory import MemoryRejected, format_for_prompt, recall, remember
 from workforce_core.policy import ActionContext, Decision, Policy, decide
+from workforce_core.schedules import ScheduleError, create_schedule
 from workforce_core.tools import TOOLS_BY_NAME
 
 from .artifacts import csv_stats, save_artifact
@@ -338,6 +339,29 @@ class ToolGateway:
             )
             self.ctx.artifacts.append(art)
             return f"Saved file {art['name']}{extra}."
+
+        if name == "set_reminder":
+            owner = await (
+                await self.conn.execute(
+                    "select created_by::text, conversation_id::text from public.tasks"
+                    " where id = %s",
+                    (self.ctx.task_id,),
+                )
+            ).fetchone()
+            try:
+                made = await create_schedule(
+                    self.conn,
+                    workspace_id=self.ctx.workspace_id,
+                    user_id=owner["created_by"],
+                    kind="reminder",
+                    what=str(args.get("message", "")),
+                    at=str(args.get("at", "")),
+                    repeat=str(args.get("repeat") or "none"),
+                    conversation_id=owner["conversation_id"],
+                )
+            except ScheduleError as exc:
+                raise ValueError(str(exc)) from exc
+            return f"Reminder set: {made.text}."
 
         if name in CONNECTED_TOOLS:
             ws, integ = self.ctx.workspace_id, self.integrations

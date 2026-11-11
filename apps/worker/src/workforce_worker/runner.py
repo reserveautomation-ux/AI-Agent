@@ -29,6 +29,7 @@ from .inbox import check_inboxes
 from .llm import LLM, AnthropicLLM, BudgetExceeded, Refused
 from .notify import ExpoPusher, Pusher, notify_task
 from .pipeline import TaskStopped, advance, load_task, transition
+from .scheduler import fire_due
 
 log = logging.getLogger("workforce_worker")
 
@@ -219,6 +220,11 @@ async def worker_loop(
             # Expire unanswered approvals and wake tasks whose approvals are all decided.
             with contextlib.suppress(Exception):
                 await conn.execute("select public.expire_approvals()")
+            # Reminders and repeating jobs that are due (row locks keep workers from doubling up).
+            try:
+                await fire_due(conn, pusher)
+            except Exception:  # noqa: BLE001 - never stop task processing
+                log.exception("firing schedules failed")
             # Important-email alerts (only one worker at a time does this, via an advisory lock).
             if integrations is not None and time.monotonic() >= next_inbox_check:
                 next_inbox_check = time.monotonic() + settings.inbox_check_seconds

@@ -71,6 +71,7 @@ const I = {
   pen: { ios: 'pencil', android: 'edit', web: 'edit' },
   spark: { ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' },
   book: { ios: 'book.closed', android: 'menu_book', web: 'menu_book' },
+  clock: { ios: 'alarm', android: 'alarm', web: 'alarm' },
   mic: { ios: 'mic.fill', android: 'mic', web: 'mic' },
   send: { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' },
   stop: { ios: 'stop.fill', android: 'stop', web: 'stop' },
@@ -233,6 +234,8 @@ export default function ChatScreen() {
             } else if (e.type === 'task') {
               setTasks((t) => ({ ...t, [e.task.id]: e.task }));
               patch((m) => ({ ...m, meta: { ...m.meta, tasks: [...(m.meta.tasks ?? []), e.task] } }));
+            } else if (e.type === 'schedule') {
+              patch((m) => ({ ...m, meta: { ...m.meta, schedules: [...(m.meta.schedules ?? []), e.schedule] } }));
             } else if (e.type === 'memory') {
               patch((m) => ({ ...m, meta: { ...m.meta, memories: [...(m.meta.memories ?? []), e.content] } }));
             } else if (e.type === 'done') {
@@ -633,6 +636,22 @@ function Message({ m, tasks, typing, speaking, onSpeak, name }: { m: ChatMessage
       </View>
     );
   }
+  if (m.meta.kind === 'reminder') {
+    return (
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Avatar />
+        <View style={{ flex: 1, gap: 8 }}>
+          <Card2
+            icon={I.clock}
+            iconColor={p.terra}
+            title={m.content.replace(/^⏰ Reminder: /, '')}
+            label={`Reminder · ${new Date(m.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`}
+          />
+          <Mono>{name} · reminder</Mono>
+        </View>
+      </View>
+    );
+  }
   if (m.meta.kind === 'task_update' && m.meta.task_id) {
     const t = tasks[m.meta.task_id] ?? { id: m.meta.task_id, title: 'Task', status: m.meta.status ?? 'running' };
     return (
@@ -659,6 +678,16 @@ function Message({ m, tasks, typing, speaking, onSpeak, name }: { m: ChatMessage
         </View>
         {(m.meta.tasks ?? []).map((t) => (
           <ToolCard key={t.id} t={tasks[t.id] ?? t} description="Handed to your workforce. Updates appear here." />
+        ))}
+        {(m.meta.schedules ?? []).map((sc) => (
+          <Card2
+            key={sc.id}
+            icon={I.clock}
+            iconColor={p.terra}
+            title={sc.title}
+            label={`${sc.kind === 'reminder' ? 'Reminder' : 'Scheduled job'} · ${sc.text}`}
+            onPress={() => router.push('/tasks')}
+          />
         ))}
         {(m.meta.memories ?? []).map((x) => (
           <Card2 key={x} icon={I.book} iconColor={p.terra} title={x} label="Saved to memory" />

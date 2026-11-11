@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, Field, field_validator
+from workforce_core.schedules import create_schedule
 
 from .. import chat as engine
 from ..auth import CurrentUser, UserDep
@@ -177,6 +178,27 @@ class _Tools:
             ) from exc
         return {"id": row["id"], "title": row["title"], "status": str(row["status"])}
 
+    async def schedule(self, args: dict) -> dict:
+        made = await create_schedule(
+            self.conn,
+            workspace_id=self.user.workspace_id,
+            user_id=self.user.user_id,
+            kind=str(args.get("kind", "reminder")),
+            what=str(args.get("what", "")),
+            at=str(args.get("at", "")),
+            repeat=str(args.get("repeat") or "none"),
+            title=(str(args["title"])[:60] if args.get("title") else None),
+            conversation_id=self.conversation_id,
+        )
+        return {
+            "id": made.id,
+            "title": made.title,
+            "kind": made.kind,
+            "repeat": made.repeat,
+            "next_run_at": made.next_run_at.isoformat(),
+            "text": made.text,
+        }
+
     async def remember(self, content: str, kind: str, trusted: bool) -> str:
         return await engine.save_memory(
             self.conn, self.user.workspace_id, content, kind, trusted=trusted
@@ -318,6 +340,8 @@ async def _save_reply(conn, conversation_id, workspace_id, event, via, *, error=
         meta["tasks"] = event["tasks"]
     if event.get("memories"):
         meta["memories"] = event["memories"]
+    if event.get("schedules"):
+        meta["schedules"] = event["schedules"]
     if error:
         meta["interrupted"] = True
     row = await (
@@ -331,3 +355,48 @@ async def _save_reply(conn, conversation_id, workspace_id, event, via, *, error=
         "update public.conversations set updated_at = now() where id = %s", (conversation_id,)
     )
     return row["id"]
+
+
+# --- reminders & repeating jobs ------------------------------------------------------------
+
+
+class ScheduleOut(BaseModel):
+    id: str
+    kind: str
+    title: str
+    what: str
+    repeat: str
+    timezone: str
+    next_run_at: datetime | None
+    active: bool
+    runs: int
+    last_run_at: datetime | None
+
+
+@router.get("/schedules", response_model=list[ScheduleOut])
+async def list_schedules(user: UserDep, conn: ConnDep) -> list[ScheduleOut]:
+    rows = await (
+        await conn.execute(
+            "select id::text, kind, title, what, repeat, timezone, next_run_at, active, runs,"
+            " last_run_at from public.schedules where user_id = %s and workspace_id = %s"
+            " and (active or last_run_at > now() - interval '7 days')"
+            " order by active desc, next_run_at nulls last limit 200",
+            (user.user_id, user.workspace_id),
+        )
+    ).fetchall()
+    return [ScheduleOut(**r) for r in rows]
+
+
+@router.post("/schedules/{schedule_id}/cancel", response_model=ScheduleOut)
+async def cancel_schedule(schedule_id: str, user: UserDep, conn: ConnDep) -> ScheduleOut:
+    row = await (
+        await conn.execute(
+            "update public.schedules set active = false where id::text = %s and user_id = %s"
+            " and workspace_id = %s returning id::text, kind, title, what, repeat, timezone,"
+            " next_run_at, active, runs, last_run_at",
+            (schedule_id, user.user_id, user.workspace_id),
+        )
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "reminder not found")
+    return ScheduleOut(**row)

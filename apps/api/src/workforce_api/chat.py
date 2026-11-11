@@ -51,6 +51,9 @@ before it happens.
 tell them, and it carries on by itself once they connect it in Connections.
 - Cabs, food delivery, shopping and movie or train tickets have no public booking API: \
 the workforce finds options and prepares a link; they confirm and pay in that app.
+- For anything at a later time or on repeat ("remind me at 6", "every Monday 9am send me \
+my unread mail"), call schedule: kind "reminder" just notifies them; kind "task" has the \
+workforce do the job at that time. Use their local time from "Now" above.
 - When they tell you a lasting fact or preference about themselves (name, family, \
 work, likes, how they want things done), call remember. Never store passwords, OTPs, \
 card or bank numbers.
@@ -105,6 +108,28 @@ TOOLS: list[dict[str, Any]] = [
                 "kind": {"type": "string", "enum": ["fact", "preference", "contact"]},
             },
             "required": ["content", "kind"],
+        },
+    },
+    {
+        "name": "schedule",
+        "description": (
+            "Set a reminder or a repeating job. kind 'reminder' notifies the person at that time "
+            "(phone + this chat); kind 'task' has the workforce do the job at that time, e.g. "
+            "'Summarise my unread email'. 'at' is their local time like 2026-11-20T16:00."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string", "enum": ["reminder", "task"]},
+                "what": {"type": "string", "description": "Reminder text, or the full job."},
+                "at": {"type": "string", "description": "First time, local: YYYY-MM-DDTHH:MM"},
+                "repeat": {
+                    "type": "string",
+                    "enum": ["none", "daily", "weekdays", "weekly", "monthly"],
+                },
+                "title": {"type": "string", "description": "Short name, max 60 characters."},
+            },
+            "required": ["kind", "what", "at"],
         },
     },
     {"type": "web_search_20260209", "name": "web_search", "max_uses": 3},
@@ -283,6 +308,8 @@ class ToolRunner(Protocol):
 
     async def remember(self, content: str, kind: str, trusted: bool) -> str: ...
 
+    async def schedule(self, args: dict) -> dict: ...
+
 
 async def reply(
     model: ChatModel,
@@ -298,7 +325,7 @@ async def reply(
     and finally {"type": "end", "text", "tasks", "memories", "stop_reason"}.
     """
     messages = list(params.pop("messages"))
-    text, tasks, memories = "", [], []
+    text, tasks, memories, schedules = "", [], [], []
     stop_reason = None
     used_web = False  # web pages read this turn could try to plant "facts"
     for _ in range(MAX_ROUNDS):
@@ -335,6 +362,11 @@ async def reply(
                     tasks.append(task)
                     yield {"type": "task", "task": task}
                     out = json.dumps({"task_id": task["id"], "status": "started"})
+                elif block.name == "schedule":
+                    item = await tools.schedule(args)
+                    schedules.append(item)
+                    yield {"type": "schedule", "schedule": item}
+                    out = f"Saved. {item['kind'].capitalize()}: {item['text']}."
                 elif block.name == "remember":
                     out = await tools.remember(
                         str(args.get("content", "")),
@@ -365,6 +397,7 @@ async def reply(
         "text": text.strip(),
         "tasks": tasks,
         "memories": memories,
+        "schedules": schedules,
         "stop_reason": stop_reason,
     }
 

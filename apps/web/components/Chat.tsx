@@ -194,6 +194,8 @@ export function Chat() {
             } else if (e.type === "task") {
               setTasks((t) => ({ ...t, [e.task.id]: e.task }));
               patch((m) => ({ ...m, meta: { ...m.meta, tasks: [...(m.meta.tasks ?? []), e.task] } }));
+            } else if (e.type === "schedule") {
+              patch((m) => ({ ...m, meta: { ...m.meta, schedules: [...(m.meta.schedules ?? []), e.schedule] } }));
             } else if (e.type === "memory") {
               patch((m) => ({ ...m, meta: { ...m.meta, memories: [...(m.meta.memories ?? []), e.content] } }));
             } else if (e.type === "done") {
@@ -614,6 +616,29 @@ function MessageView({
       </div>
     );
   }
+  if (m.meta.kind === "reminder") {
+    return (
+      <div className="msg assistant">
+        <span className="avatar" aria-hidden>
+          <FeatherIcon />
+        </span>
+        <div className="msg-body">
+          <div className="tool-card wait">
+            <div className="tool-head">
+              <span className="tool-icon">
+                <ClockIcon />
+              </span>
+              <div>
+                <p className="tool-title">{m.content.replace(/^⏰ Reminder: /, "")}</p>
+                <p className="mono-label">Reminder · {new Date(m.created_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</p>
+              </div>
+            </div>
+          </div>
+          <p className="mono-label who">{name} · reminder</p>
+        </div>
+      </div>
+    );
+  }
   if (m.meta.kind === "task_update" && m.meta.task_id) {
     const t = tasks[m.meta.task_id] ?? { id: m.meta.task_id, title: "Task", status: m.meta.status ?? "running" };
     return (
@@ -648,6 +673,23 @@ function MessageView({
         </div>
         {(m.meta.tasks ?? []).map((t) => (
           <ToolCard key={t.id} t={tasks[t.id] ?? t} description="Handed to your workforce. Updates appear here." />
+        ))}
+        {(m.meta.schedules ?? []).map((sc) => (
+          <div key={sc.id} className="tool-card wait">
+            <div className="tool-head">
+              <span className="tool-icon">
+                <ClockIcon />
+              </span>
+              <div>
+                <Link href="/tasks#schedules" className="tool-title">
+                  {sc.title}
+                </Link>
+                <p className="mono-label">
+                  {sc.kind === "reminder" ? "Reminder" : "Scheduled job"} · {sc.text}
+                </p>
+              </div>
+            </div>
+          </div>
         ))}
         {(m.meta.memories ?? []).map((x) => (
           <div key={x} className="tool-card memory">
@@ -804,6 +846,12 @@ const PenIcon = () => (
 const SparkIcon = () => (
   <Svg>
     <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6" />
+  </Svg>
+);
+const ClockIcon = () => (
+  <Svg>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M12 8v4.5l3 2" />
   </Svg>
 );
 const BookIcon = () => (

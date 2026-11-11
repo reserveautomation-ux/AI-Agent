@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { Schedules } from '@/components/Schedules';
 import { Badge, Button, Card, ErrorText, H, Icon, Input, T, styles } from '@/components/ui';
 import { api, post, type Capability, type Task } from '@/lib/api';
 import { useTheme } from '@/lib/theme';
@@ -196,6 +197,8 @@ export default function CommandScreen() {
         />
         <ErrorText>{error}</ErrorText>
       </Card>
+
+      <Schedules />
 
       <H>Tasks</H>
       {tasks === null ? (
