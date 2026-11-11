@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Linking from 'expo-linking';
 import { router, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as Speech from 'expo-speech';
@@ -75,6 +76,7 @@ const I = {
   book: { ios: 'book.closed', android: 'menu_book', web: 'menu_book' },
   clock: { ios: 'alarm', android: 'alarm', web: 'alarm' },
   clip: { ios: 'paperclip', android: 'attach_file', web: 'attach_file' },
+  whatsapp: { ios: 'bubble.left.and.text.bubble.right', android: 'chat', web: 'chat' },
   camera: { ios: 'camera', android: 'photo_camera', web: 'photo_camera' },
   photo: { ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' },
   doc: { ios: 'doc.text', android: 'description', web: 'description' },
@@ -245,6 +247,8 @@ export default function ChatScreen() {
             } else if (e.type === 'task') {
               setTasks((t) => ({ ...t, [e.task.id]: e.task }));
               patch((m) => ({ ...m, meta: { ...m.meta, tasks: [...(m.meta.tasks ?? []), e.task] } }));
+            } else if (e.type === 'action') {
+              patch((m) => ({ ...m, meta: { ...m.meta, actions: [...(m.meta.actions ?? []), e.action] } }));
             } else if (e.type === 'schedule') {
               patch((m) => ({ ...m, meta: { ...m.meta, schedules: [...(m.meta.schedules ?? []), e.schedule] } }));
             } else if (e.type === 'memory') {
@@ -809,6 +813,25 @@ function Message({ m, tasks, typing, speaking, onSpeak, name }: { m: ChatMessage
         </View>
         {(m.meta.tasks ?? []).map((t) => (
           <ToolCard key={t.id} t={tasks[t.id] ?? t} description="Handed to your workforce. Updates appear here." />
+        ))}
+        {(m.meta.actions ?? []).map((a) => (
+          <Card2
+            key={a.url}
+            icon={I.whatsapp}
+            iconColor="#1f9d55"
+            title={`WhatsApp to ${a.name || a.to || 'a contact you pick'}`}
+            label={`${a.to ? `${a.to} · ` : ''}Ready · tap send in WhatsApp`}>
+            <Text style={{ fontFamily: FONTS.sans, fontSize: 15.5, lineHeight: 22, color: p.ink, backgroundColor: p.bg, borderRadius: 14, padding: 12 }}>
+              {a.text}
+            </Text>
+            <Pressable
+              onPress={() => Linking.openURL(a.url)}
+              accessibilityRole="button"
+              accessibilityLabel="Open WhatsApp"
+              style={({ pressed }) => ({ alignSelf: 'flex-start', backgroundColor: '#1f9d55', borderRadius: 999, paddingVertical: 10, paddingHorizontal: 20, opacity: pressed ? 0.8 : 1 })}>
+              <Text style={{ color: '#fff', fontFamily: FONTS.sansBold, fontSize: 16 }}>Open WhatsApp</Text>
+            </Pressable>
+          </Card2>
         ))}
         {(m.meta.schedules ?? []).map((sc) => (
           <Card2

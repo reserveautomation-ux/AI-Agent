@@ -102,7 +102,13 @@ def test_streams_a_reply_and_keeps_the_conversation(make_client, make_user, db):
     assert "You are AI Assistant, the personal AI assistant of owner@example.com" in p["system"]
     assert "Connected services: none yet" in p["system"] and "Gmail" in p["system"]
     assert p["thinking"] == {"type": "adaptive"} and p["output_config"] == {"effort": "low"}
-    assert {t["name"] for t in p["tools"]} == {"start_task", "remember", "schedule", "web_search"}
+    assert {t["name"] for t in p["tools"]} == {
+        "start_task",
+        "remember",
+        "schedule",
+        "whatsapp_message",
+        "web_search",
+    }
 
     send(client, h, "Thanks", conversation_id=conv)
     assert [m["role"] for m in model.calls[1]["messages"]] == ["user", "assistant", "user"]
@@ -448,3 +454,37 @@ def send_json(client, h, body):
     with client.stream("POST", "/chat", json={"via": "text", **body}, headers=h) as r:
         assert r.status_code == 200, r.read()
         return [json.loads(line[6:]) for line in r.iter_lines() if line.startswith("data: ")]
+
+
+def test_whatsapp_message_for_normal_whatsapp(make_client, make_user):
+    model = FakeChat(
+        (
+            [],
+            final(
+                [
+                    tool_block(
+                        "whatsapp_message",
+                        {
+                            "to": "98765 43210",
+                            "name": "Mom",
+                            "message": "Ghar 8 baje tak aa jaungi 🙏",
+                        },
+                    )
+                ],
+                stop="tool_use",
+            ),
+        ),
+        say("Tap the button to send it from your WhatsApp."),
+    )
+    client = make_client(model)
+    h = auth(make_user())
+    events = send(client, h, "WhatsApp mom I'll be home by 8, in Hindi")
+    action = next(e["action"] for e in events if e["type"] == "action")
+    assert action["kind"] == "whatsapp" and action["to"] == "+919876543210"
+    assert action["url"].startswith("https://wa.me/919876543210?text=Ghar%208%20baje")
+    result = model.calls[1]["messages"][-1]["content"][0]["content"]
+    assert "NOT sent until they tap Send" in result
+    assert "whatsapp_message" in model.calls[0]["system"]
+    conv = events[0]["id"]
+    saved = client.get(f"/conversations/{conv}", headers=h).json()["messages"][-1]
+    assert saved["meta"]["actions"][0]["name"] == "Mom"

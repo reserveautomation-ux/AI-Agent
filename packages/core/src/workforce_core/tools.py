@@ -440,6 +440,19 @@ TOOLS: tuple[ToolSpec, ...] = (
         _obj(url=_S, fields=_S),
     ),
     ToolSpec(
+        "whatsapp_link",
+        "communication",
+        "Prepare a message for the owner to send from their normal WhatsApp: returns a link "
+        "that opens WhatsApp with the text filled in; they tap Send. Put the link in your result.",
+        T.INTERNAL_WRITE,
+        "whatsapp_personal",
+        {
+            "type": "object",
+            "properties": {"to": {"type": "string"}, "message": {"type": "string"}},
+            "required": ["message"],
+        },
+    ),
+    ToolSpec(
         "prepare_booking_link",
         "commerce",
         "Prepare a ride, food, movie or shopping order for you to confirm in the provider app.",

@@ -104,6 +104,14 @@ PROVIDERS: tuple[Provider, ...] = (
         "allowance of 10,000 'neurons' a day, about 230 pictures at default settings.",
     ),
     Provider(
+        "whatsapp_personal",
+        "WhatsApp (your normal app)",
+        "communication",
+        Access.DEEP_LINK,
+        "Click-to-chat links (wa.me): WhatsApp opens with the message filled in and you tap Send. "
+        "Works with any WhatsApp. Automating a personal account is against WhatsApp's terms.",
+    ),
+    Provider(
         "gmail_inbox",
         "Gmail inbox",
         "communication",

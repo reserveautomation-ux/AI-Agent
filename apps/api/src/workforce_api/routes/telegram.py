@@ -261,10 +261,16 @@ async def _handle(app, link_id: str, update: dict) -> None:
             )
     with contextlib.suppress(ValueError, httpx.HTTPError):
         await tg.call(http, token, "sendChatAction", {"chat_id": chat_id, "action": "typing"})
+    links: list[dict] = []
     async for event in assistant_events(
         app.state.pool, model, settings, user, conv["id"], text, "text"
     ):
-        if event["type"] == "done":
+        if event["type"] == "action":
+            links.append(event["action"])
+        elif event["type"] == "done":
             await say(event["text"] or "Done.")
+            for a in links:
+                who = a.get("name") or a.get("to") or "a contact"
+                await say(f"Tap to send on WhatsApp to {who}:\n{a['url']}")
         elif event["type"] == "error":
             await say(event["message"])

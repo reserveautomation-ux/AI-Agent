@@ -320,6 +320,7 @@ export interface ChatMessage {
     memories?: string[];
     schedules?: ScheduleRef[];
     attachments?: { id: string; name: string; media_type: string; preview?: string }[];
+    actions?: { kind: 'whatsapp'; url: string; to: string; name?: string; text: string }[];
     interrupted?: boolean;
   };
   created_at: string;
@@ -336,6 +337,7 @@ export type ChatEvent =
   | { type: 'task'; task: ChatTaskRef }
   | { type: 'memory'; content: string }
   | { type: 'schedule'; schedule: ScheduleRef }
+  | { type: 'action'; action: { kind: 'whatsapp'; url: string; to: string; name?: string; text: string } }
   | { type: 'done'; message_id: string; text: string }
   | { type: 'error'; message: string };
 

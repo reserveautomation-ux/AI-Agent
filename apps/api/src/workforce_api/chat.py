@@ -52,6 +52,12 @@ before it happens.
 tell them, and it carries on by itself once they connect it in Connections.
 - Cabs, food delivery, shopping and movie or train tickets have no public booking API: \
 the workforce finds options and prepares a link; they confirm and pay in that app.
+- To WhatsApp someone from their normal WhatsApp, call whatsapp_message: it opens their \
+WhatsApp with the message filled in and they tap Send (works with any WhatsApp; nothing is \
+sent without them). Use a number from memory or the chat if you have one, with country \
+code; otherwise leave it empty and they pick the contact. Write the message in the language \
+and tone they'd use with that person. Only use start_task for WhatsApp when they've \
+connected a WhatsApp Business number and want it sent automatically after approval.
 - For anything at a later time or on repeat ("remind me at 6", "every Monday 9am send me \
 my unread mail"), call schedule: kind "reminder" just notifies them; kind "task" has the \
 workforce do the job at that time. Use their local time from "Now" above.
@@ -134,6 +140,26 @@ TOOLS: list[dict[str, Any]] = [
                 "title": {"type": "string", "description": "Short name, max 60 characters."},
             },
             "required": ["kind", "what", "at"],
+        },
+    },
+    {
+        "name": "whatsapp_message",
+        "description": (
+            "Prepare a message for the person to send from their own normal WhatsApp: opens "
+            "WhatsApp with the text filled in (and the chat, if the number is given); they tap "
+            "Send. Returns the link shown to them as a button."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "to": {
+                    "type": "string",
+                    "description": "Phone number with country code, or empty to pick in WhatsApp",
+                },
+                "name": {"type": "string", "description": "Who it's for, e.g. Mom"},
+                "message": {"type": "string"},
+            },
+            "required": ["message"],
         },
     },
     {"type": "web_search_20260209", "name": "web_search", "max_uses": 3},
@@ -360,6 +386,8 @@ class ToolRunner(Protocol):
 
     async def schedule(self, args: dict) -> dict: ...
 
+    async def whatsapp(self, args: dict) -> dict: ...
+
 
 async def reply(
     model: ChatModel,
@@ -375,7 +403,7 @@ async def reply(
     and finally {"type": "end", "text", "tasks", "memories", "stop_reason"}.
     """
     messages = list(params.pop("messages"))
-    text, tasks, memories, schedules = "", [], [], []
+    text, tasks, memories, schedules, actions = "", [], [], [], []
     stop_reason = None
     used_web = False  # web pages read this turn could try to plant "facts"
     for _ in range(MAX_ROUNDS):
@@ -412,6 +440,15 @@ async def reply(
                     tasks.append(task)
                     yield {"type": "task", "task": task}
                     out = json.dumps({"task_id": task["id"], "status": "started"})
+                elif block.name == "whatsapp_message":
+                    item = await tools.whatsapp(args)
+                    actions.append(item)
+                    yield {"type": "action", "action": item}
+                    out = (
+                        "Ready: a button opens their WhatsApp with this message"
+                        + (f" to {item['to']}" if item["to"] else " (they pick the contact)")
+                        + ". It is NOT sent until they tap Send in WhatsApp."
+                    )
                 elif block.name == "schedule":
                     item = await tools.schedule(args)
                     schedules.append(item)
@@ -448,6 +485,7 @@ async def reply(
         "tasks": tasks,
         "memories": memories,
         "schedules": schedules,
+        "actions": actions,
         "stop_reason": stop_reason,
     }
 

@@ -16,6 +16,7 @@ from fastapi.responses import Response, StreamingResponse
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 from pydantic import BaseModel, Field, model_validator
+from workforce_core import whatsapp_link as wa
 from workforce_core.schedules import create_schedule
 
 from .. import chat as engine
@@ -226,6 +227,25 @@ class _Tools:
             "text": made.text,
         }
 
+    async def whatsapp(self, args: dict) -> dict:
+        tz = await (
+            await self.conn.execute(
+                "select timezone from public.workspaces where id = %s", (self.user.workspace_id,)
+            )
+        ).fetchone()
+        link = wa.build(
+            str(args.get("to") or ""),
+            str(args.get("message") or ""),
+            wa.default_country_for(tz["timezone"] if tz else None),
+        )
+        return {
+            "kind": "whatsapp",
+            "url": link.url,
+            "to": link.to,
+            "name": str(args.get("name") or "")[:60],
+            "text": link.text,
+        }
+
     async def remember(self, content: str, kind: str, trusted: bool) -> str:
         return await engine.save_memory(
             self.conn, self.user.workspace_id, content, kind, trusted=trusted
@@ -419,6 +439,8 @@ async def _save_reply(conn, conversation_id, workspace_id, event, via, *, error=
         meta["memories"] = event["memories"]
     if event.get("schedules"):
         meta["schedules"] = event["schedules"]
+    if event.get("actions"):
+        meta["actions"] = event["actions"]
     if error:
         meta["interrupted"] = True
     row = await (

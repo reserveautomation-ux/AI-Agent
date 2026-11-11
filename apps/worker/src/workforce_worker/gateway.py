@@ -15,6 +15,7 @@ from urllib.parse import quote_plus
 
 from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
+from workforce_core import whatsapp_link as wa
 from workforce_core.approvals import binding_for, canonical_json
 from workforce_core.db import record_audit
 from workforce_core.memory import MemoryRejected, format_for_prompt, recall, remember
@@ -404,6 +405,24 @@ class ToolGateway:
             )
             self.ctx.artifacts.append(art)
             return f"Saved the draft as {art['name']}. To send it, use send_email (needs approval)."
+
+        if name == "whatsapp_link":
+            tz = await (
+                await self.conn.execute(
+                    "select timezone from public.workspaces where id = %s",
+                    (self.ctx.workspace_id,),
+                )
+            ).fetchone()
+            link = wa.build(
+                str(args.get("to") or ""),
+                str(args.get("message") or ""),
+                wa.default_country_for(tz["timezone"] if tz else None),
+            )
+            who = link.to or "a contact they pick"
+            return (
+                f"WhatsApp message ready for {who}. Give the owner this link to tap and send "
+                f"from their WhatsApp (not sent yet): {link.url}"
+            )
 
         if name == "prepare_booking_link":
             provider = str(args.get("provider", "")).lower().strip()

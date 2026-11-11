@@ -202,6 +202,8 @@ export function Chat() {
             } else if (e.type === "task") {
               setTasks((t) => ({ ...t, [e.task.id]: e.task }));
               patch((m) => ({ ...m, meta: { ...m.meta, tasks: [...(m.meta.tasks ?? []), e.task] } }));
+            } else if (e.type === "action") {
+              patch((m) => ({ ...m, meta: { ...m.meta, actions: [...(m.meta.actions ?? []), e.action] } }));
             } else if (e.type === "schedule") {
               patch((m) => ({ ...m, meta: { ...m.meta, schedules: [...(m.meta.schedules ?? []), e.schedule] } }));
             } else if (e.type === "memory") {
@@ -760,6 +762,25 @@ function MessageView({
         {(m.meta.tasks ?? []).map((t) => (
           <ToolCard key={t.id} t={tasks[t.id] ?? t} description="Handed to your workforce. Updates appear here." />
         ))}
+        {(m.meta.actions ?? []).map((a) => (
+          <div key={a.url} className="tool-card wa-card">
+            <div className="tool-head">
+              <span className="tool-icon wa-icon">
+                <ChatBubbleIcon />
+              </span>
+              <div>
+                <p className="tool-title">WhatsApp to {a.name || a.to || "a contact you pick"}</p>
+                <p className="mono-label">{a.to ? `${a.to} · ` : ""}Ready · tap send in WhatsApp</p>
+              </div>
+            </div>
+            <p className="wa-text">{a.text}</p>
+            <div>
+              <a className="wa-btn" href={a.url} target="_blank" rel="noreferrer noopener">
+                Open WhatsApp
+              </a>
+            </div>
+          </div>
+        ))}
         {(m.meta.schedules ?? []).map((sc) => (
           <div key={sc.id} className="tool-card wait">
             <div className="tool-head">
@@ -961,6 +982,12 @@ function Attachment({ file }: { file: ChatFile }) {
 const ClipIcon = () => (
   <Svg size={22}>
     <path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />
+  </Svg>
+);
+const ChatBubbleIcon = () => (
+  <Svg>
+    <path d="M4 20l1.4-4.2A8 8 0 1 1 8.2 18.6L4 20z" />
+    <path d="M9 10.5c.5 1.8 2 3.3 3.8 3.9l1.2-1.2 2 .8" />
   </Svg>
 );
 const ClockIcon = () => (

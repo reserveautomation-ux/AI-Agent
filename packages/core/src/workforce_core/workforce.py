@@ -141,7 +141,7 @@ _AGENT_DEFS: tuple[AgentTemplate, ...] = (
         "specialist",
         "personal_executive",
         "Writes and (with approval) sends WhatsApp, Telegram and Slack messages.",
-        ("send_whatsapp", "send_telegram", "post_slack", "recall"),
+        ("whatsapp_link", "send_whatsapp", "send_telegram", "post_slack", "recall"),
     ),
     # Research
     A(

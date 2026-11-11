@@ -160,6 +160,20 @@ CONNECTORS: tuple[Connector, ...] = (
         ),
     ),
     C(
+        "whatsapp_personal",
+        "WhatsApp (your normal app)",
+        "Communication",
+        "🟢",
+        "Your assistant writes the message and opens your own WhatsApp with it filled in; you "
+        "tap Send. Works with any WhatsApp, nothing to connect.",
+        A.DEEP_LINK,
+        True,
+        ("whatsapp_link",),
+        open_url="https://wa.me/",
+        note="Reading or sending automatically isn't possible on a personal number (WhatsApp's "
+        "rules); for that, connect a WhatsApp Business number below.",
+    ),
+    C(
         "whatsapp",
         "WhatsApp Business",
         "Communication",

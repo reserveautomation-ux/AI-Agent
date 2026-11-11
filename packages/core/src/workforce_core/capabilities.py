@@ -75,6 +75,13 @@ CAPABILITIES: tuple[Capability, ...] = (
         "Make a Diwali sale poster for my café and a simple logo",
         ("make_image", "create_document"),
     ),
+    C(
+        "whatsapp_personal",
+        "Personal assistant",
+        "Write WhatsApp messages for you",
+        "WhatsApp mom that I'll be home by 8, in Hindi",
+        ("whatsapp_link",),
+    ),
     # Inbox
     C(
         "inbox",

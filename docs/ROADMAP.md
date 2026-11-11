@@ -20,6 +20,7 @@ Prices change; check each provider before switching something on.
 | Google Drive | Save results as Google Docs, Sheets or files | Free |
 | Reminders & repeating jobs | "Remind me at 6", "every Monday summarise my inbox" | Free |
 | Telegram | Chat with your assistant from Telegram; alerts arrive there too | Free |
+| WhatsApp (your normal app) | The assistant writes the message; your WhatsApp opens with it filled in; you tap Send | Free |
 | WhatsApp (business number) | Send approved messages | Free tier (Meta) |
 | Slack | Post approved messages | Free |
 | GitHub + Vercel | Build a website and publish it at a `*.vercel.app` address | Free tier |
