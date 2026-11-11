@@ -166,3 +166,29 @@ def test_every_tool_maps_to_a_known_provider():
 def test_money_moving_tools_are_tier_three_or_higher():
     for name in ("book_flight", "place_stock_order", "play_store_release", "app_store_submit"):
         assert next(t for t in TOOLS if t.name == name).risk_tier >= RiskTier.FINANCIAL
+
+
+# --- capabilities -------------------------------------------------------------
+
+
+def test_capability_handling_is_derived_from_tool_risk():
+    from workforce_core.capabilities import CAPABILITIES_BY_KEY as C
+    from workforce_core.capabilities import Handling
+
+    assert C["research"].handling == Handling.AUTOMATIC
+    assert C["email"].handling == Handling.ASKS_APPROVAL
+    assert C["flights"].handling == Handling.OWNER_APPROVAL
+    assert C["stock_orders"].handling == Handling.OWNER_APPROVAL
+    assert C["mobile_app"].handling == Handling.OWNER_APPROVAL
+    for key in ("cab", "food", "movies", "shopping"):
+        assert C[key].handling == Handling.YOU_CONFIRM_IN_APP, key
+
+
+def test_every_capability_is_staffed_by_some_agent():
+    from workforce_core.capabilities import CAPABILITIES
+    from workforce_core.workforce import AGENTS
+
+    staffed = {tool for a in AGENTS for tool in a.tools}
+    for c in CAPABILITIES:
+        missing = set(c.tools) - staffed
+        assert not missing, f"{c.key}: no agent has {missing}"

@@ -17,6 +17,11 @@ const TONE: Record<string, string> = {
   draft: "muted",
 };
 
+function label(status: string) {
+  const text = status.replaceAll("_", " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export function StatusBadge({ status }: { status: string }) {
-  return <span className={`badge ${TONE[status] ?? "muted"}`}>{status.replaceAll("_", " ")}</span>;
+  return <span className={`badge ${TONE[status] ?? "muted"}`}>{label(status)}</span>;
 }

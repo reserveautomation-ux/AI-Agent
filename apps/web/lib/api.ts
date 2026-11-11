@@ -152,3 +152,11 @@ export interface AuditEvent {
   event_json: Record<string, unknown>;
   created_at: string;
 }
+
+export interface Capability {
+  key: string;
+  area: string;
+  title: string;
+  example: string;
+  handling: "automatic" | "asks_approval" | "owner_approval" | "you_confirm_in_app";
+}

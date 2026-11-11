@@ -141,7 +141,9 @@ def test_bootstrap_builds_hierarchy_idempotently(client, make_user):
     chief = by_role["chief"][0]
     assert all(a["parent_agent_id"] == chief["id"] for a in by_role["department_head"])
     heads = {a["id"] for a in by_role["department_head"]}
-    assert all(a["parent_agent_id"] in heads for a in by_role["specialist"])
+    for a in by_role["specialist"]:
+        expected = heads if a["department_id"] else {chief["id"]}
+        assert a["parent_agent_id"] in expected, a["name"]
     assert all(d["manager_agent_id"] in heads for d in wf["departments"])
 
 
@@ -220,3 +222,30 @@ def test_integrations_register(client, make_user):
     access = {i["key"]: i["access"] for i in body}
     assert access["gmail"] == "official_api"
     assert access["deep_links"] == "deep_link"
+
+
+def test_bootstrap_adds_only_missing_agents(client, make_user, db):
+    uid = make_user()
+    h = auth(uid)
+    ws = client.get("/me", headers=h).json()["workspace"]["id"]
+    # An older workspace that only ever hired the chief.
+    db.execute(
+        "insert into agents (workspace_id, name, role, status, template_key)"
+        " values (%s, 'Chief AI Executive', 'chief', 'active', 'chief')",
+        (ws,),
+    )
+    wf = _bootstrap(client, h)
+    assert len(wf["agents"]) == len(AGENTS)
+    chiefs = [a for a in wf["agents"] if a["role"] == "chief"]
+    assert len(chiefs) == 1
+    generalist = next(a for a in wf["agents"] if a["template_key"] == "generalist")
+    assert generalist["parent_agent_id"] == chiefs[0]["id"]
+    assert generalist["department_id"] is None
+
+
+def test_capabilities_catalog(client, make_user):
+    caps = client.get("/capabilities", headers=auth(make_user())).json()
+    by_key = {c["key"]: c for c in caps}
+    assert by_key["research"]["handling"] == "automatic"
+    assert by_key["cab"]["handling"] == "you_confirm_in_app"
+    assert by_key["stock_orders"]["handling"] == "owner_approval"

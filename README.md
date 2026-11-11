@@ -5,9 +5,13 @@ agents → verified result, with your approval wherever money or commitments are
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, safety model and roadmap.
 
-**Status: phase 1 (foundation).** You can sign in, give instructions (stored as
-durable tasks), hire the agent workforce, clone/suspend/retire agents, use the
-kill switch and read the audit log. Agents start executing tasks in phase 2.
+**Status: phase 1 (foundation).** You can sign in, give instructions by typing
+or by voice (stored as durable tasks), see everything the workforce can do,
+hire the 28-agent workforce, clone/suspend/retire agents, use the kill switch and
+read the audit log. Agents start executing tasks in phase 2.
+
+Voice input uses the browser's built-in speech recognition (Chrome, Edge,
+Safari, Android, iPhone). Firefox doesn't support it yet; typing still works there.
 
 ```
 apps/web        Next.js web app (works on phones; add to home screen)

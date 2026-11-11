@@ -49,10 +49,14 @@ DEPARTMENTS: tuple[DepartmentTemplate, ...] = (
     DepartmentTemplate("shopping", "Shopping, Food & Orders"),
     DepartmentTemplate("finance", "Financial Intelligence"),
     DepartmentTemplate("software", "Software Factory"),
-    DepartmentTemplate("operations", "Operations"),
+    DepartmentTemplate("marketing", "Marketing & Content"),
+    DepartmentTemplate("operations", "Operations, Data & Documents"),
 )
 
 A = AgentTemplate
+
+# Safe general-purpose tools (tiers 0-1) any capable agent may use.
+GENERAL = ("web_search", "web_fetch", "browse_page", "recall", "run_code", "create_document")
 
 AGENTS: tuple[AgentTemplate, ...] = (
     A(
@@ -62,7 +66,7 @@ AGENTS: tuple[AgentTemplate, ...] = (
         None,
         "Turns your instructions into plans, delegates to departments, tracks progress, "
         "escalates blockers and reports back. Cannot override your policies.",
-        ("web_search", "remember", "create_report"),
+        ("web_search", "recall", "remember", "create_report", "set_reminder"),
         "executive",
     ),
     A(
@@ -72,8 +76,17 @@ AGENTS: tuple[AgentTemplate, ...] = (
         None,
         "Independently checks deliverables against acceptance criteria before a task "
         "can be marked complete.",
-        ("web_fetch", "create_report"),
+        ("web_fetch", "browse_page", "run_code", "create_report"),
         "verifier",
+    ),
+    A(
+        "generalist",
+        "General Task Agent",
+        "specialist",
+        None,
+        "Takes any instruction that no department covers, using safe general tools. Hands "
+        "anything needing money, messages or accounts to the right specialist.",
+        (*GENERAL, "create_report", "remember", "set_reminder", "watch"),
     ),
     # Personal Executive
     A(
@@ -81,7 +94,8 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "Personal Executive Lead",
         "department_head",
         "personal_executive",
-        "Owns your calendar, inbox and follow-ups.",
+        "Owns your calendar, inbox, messages, reminders and follow-ups.",
+        ("recall", "set_reminder"),
     ),
     A(
         "pe_email",
@@ -89,7 +103,7 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "specialist",
         "personal_executive",
         "Drafts and (with approval) sends email.",
-        ("draft_email", "send_email"),
+        ("draft_email", "send_email", "recall"),
     ),
     A(
         "pe_calendar",
@@ -97,7 +111,15 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "specialist",
         "personal_executive",
         "Schedules meetings and reminders.",
-        ("calendar_create_event", "remember"),
+        ("calendar_create_event", "set_reminder", "remember", "recall"),
+    ),
+    A(
+        "pe_messaging",
+        "Messaging Agent",
+        "specialist",
+        "personal_executive",
+        "Writes and (with approval) sends WhatsApp messages.",
+        ("send_whatsapp", "recall"),
     ),
     # Research
     A(
@@ -105,7 +127,7 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "Research Lead",
         "department_head",
         "research",
-        "Plans research, lead generation and comparisons.",
+        "Plans research, lead generation, influencer discovery and vendor comparisons.",
     ),
     A(
         "rs_web",
@@ -113,7 +135,7 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "specialist",
         "research",
         "Finds, deduplicates and ranks information with sources.",
-        ("web_search", "web_fetch", "create_report"),
+        (*GENERAL, "create_report"),
     ),
     # Travel
     A(
@@ -129,15 +151,15 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "specialist",
         "travel",
         "Searches and (with owner approval) books flights.",
-        ("web_search", "book_flight"),
+        ("web_search", "book_flight", "watch"),
     ),
     A(
         "tr_local",
         "Rides & Tickets Agent",
         "specialist",
         "travel",
-        "Finds cabs, movie and event options and prepares bookings for you to confirm.",
-        ("web_search", "prepare_booking_link"),
+        "Finds cabs, trains, movie and event options and prepares bookings for you to confirm.",
+        ("web_search", "browse_page", "prepare_booking_link"),
     ),
     # Shopping & food
     A(
@@ -153,7 +175,15 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "specialist",
         "shopping",
         "Compares products and food options; prepares orders for you to confirm.",
-        ("web_search", "web_fetch", "prepare_booking_link"),
+        ("web_search", "web_fetch", "browse_page", "prepare_booking_link"),
+    ),
+    A(
+        "sh_watch",
+        "Price Watch Agent",
+        "specialist",
+        "shopping",
+        "Tracks prices and stock and tells you when to buy.",
+        ("web_search", "browse_page", "watch"),
     ),
     # Finance
     A(
@@ -169,7 +199,7 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "specialist",
         "finance",
         "Researches stocks with stated uncertainty and data freshness. Never promises returns.",
-        ("market_data", "web_search", "create_report"),
+        ("market_data", "web_search", "run_code", "create_report", "watch"),
     ),
     A(
         "fi_trader",
@@ -185,7 +215,7 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "Software Factory Lead",
         "department_head",
         "software",
-        "Turns a product brief into a tested, deployable app.",
+        "Turns a product brief into a tested, deployable website or mobile app.",
     ),
     A(
         "sw_engineer",
@@ -193,7 +223,7 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "specialist",
         "software",
         "Writes code, tests and pull requests.",
-        ("git_commit_push", "web_fetch"),
+        ("git_commit_push", "web_fetch", "run_code"),
     ),
     A(
         "sw_release",
@@ -203,14 +233,62 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "Deploys web apps and submits store releases with your approval.",
         ("deploy_web", "play_store_release", "app_store_submit"),
     ),
-    # Operations
+    # Marketing & content
+    A(
+        "mk_head",
+        "Marketing Lead",
+        "department_head",
+        "marketing",
+        "Content plans, campaigns and brand voice.",
+    ),
+    A(
+        "mk_writer",
+        "Content Writer Agent",
+        "specialist",
+        "marketing",
+        "Writes posts, blogs, captions, scripts and ad copy.",
+        ("web_search", "recall", "create_document"),
+    ),
+    A(
+        "mk_social",
+        "Social Media Agent",
+        "specialist",
+        "marketing",
+        "Schedules and (with approval) publishes posts.",
+        ("post_social", "recall"),
+    ),
+    # Operations, data & documents
     A(
         "op_head",
         "Operations Lead",
         "department_head",
         "operations",
-        "Reporting, CRM updates and document workflows.",
+        "Reporting, CRM updates, invoices and document workflows.",
         ("create_report",),
+    ),
+    A(
+        "op_data",
+        "Data Analyst Agent",
+        "specialist",
+        "operations",
+        "Cleans spreadsheets, analyses data and builds charts and dashboards.",
+        ("run_code", "create_document", "save_to_drive"),
+    ),
+    A(
+        "op_docs",
+        "Documents Agent",
+        "specialist",
+        "operations",
+        "Creates letters, invoices, proposals and presentations.",
+        ("create_document", "save_to_drive", "recall"),
+    ),
+    A(
+        "op_forms",
+        "Web Forms Agent",
+        "specialist",
+        "operations",
+        "Fills online forms on sites that allow it, with your approval before submitting.",
+        ("browse_page", "browser_submit_form", "recall"),
     ),
 )
 

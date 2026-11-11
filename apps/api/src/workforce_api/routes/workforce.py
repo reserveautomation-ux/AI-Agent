@@ -138,87 +138,103 @@ async def get_workforce(user: UserDep, conn: ConnDep) -> WorkforceOut:
 
 @router.post("/workforce/bootstrap", response_model=WorkforceOut)
 async def bootstrap_workforce(user: AdminDep, conn: ConnDep) -> WorkforceOut:
-    """Hire the initial workforce from templates. Idempotent."""
+    """Hire any departments and agents from the templates that this workspace lacks.
+
+    Idempotent: safe to run again after new agent types are added. Agents that
+    were retired stay retired (they count as already hired).
+    """
     async with conn.transaction():
         # Serialise concurrent bootstraps for this workspace.
         await conn.execute(
             "select id from public.workspaces where id = %s for update", (user.workspace_id,)
         )
-        existing = await (
+        dept_rows = await (
             await conn.execute(
-                "select count(*) as n from public.agents where workspace_id = %s",
+                "select key, id::text from public.departments"
+                " where workspace_id = %s and key is not null",
                 (user.workspace_id,),
             )
-        ).fetchone()
-        if existing["n"] == 0:
-            await set_actor(conn, "user", user.user_id, "initial workforce")
-            dept_ids: dict[str, str] = {}
-            for d in DEPARTMENTS:
-                row = await (
-                    await conn.execute(
-                        "insert into public.departments (workspace_id, key, name)"
-                        " values (%s, %s, %s) returning id::text",
-                        (user.workspace_id, d.key, d.name),
-                    )
-                ).fetchone()
-                dept_ids[d.key] = row["id"]
+        ).fetchall()
+        dept_ids: dict[str, str] = {r["key"]: r["id"] for r in dept_rows}
+        agent_rows = await (
+            await conn.execute(
+                "select template_key, id::text from public.agents"
+                " where workspace_id = %s and cloned_from is null and template_key is not null",
+                (user.workspace_id,),
+            )
+        ).fetchall()
+        agent_ids: dict[str, str] = {r["template_key"]: r["id"] for r in agent_rows}
 
-            agent_ids: dict[str, str] = {}
-            chief_id: str | None = None
-            heads: dict[str, str] = {}
-            # Chief first, then heads, then specialists, so parents exist.
-            order = {"chief": 0, "verifier": 1, "department_head": 2, "specialist": 3}
-            for t in sorted(AGENTS, key=lambda a: order[a.role]):
-                if t.role == "department_head":
-                    parent = chief_id
-                elif t.role == "specialist":
-                    parent = heads[t.department]
-                elif t.role == "verifier":
-                    parent = chief_id
-                else:
-                    parent = None
-                config = {"description": t.description, **MODEL_PROFILES[t.model_profile]}
-                row = await (
-                    await conn.execute(
-                        """insert into public.agents
-                               (workspace_id, department_id, parent_agent_id, name, role,
-                                status, template_key, model_profile, allowed_tools, config_json)
-                           values (%s, %s, %s, %s, %s, 'active', %s, %s, %s, %s)
-                           returning id::text""",
-                        (
-                            user.workspace_id,
-                            dept_ids.get(t.department) if t.department else None,
-                            parent,
-                            t.name,
-                            t.role,
-                            t.key,
-                            t.model_profile,
-                            list(t.tools),
-                            Jsonb(config),
-                        ),
-                    )
-                ).fetchone()
-                agent_ids[t.key] = row["id"]
+        await set_actor(conn, "user", user.user_id, "hire workforce")
+        new_depts = 0
+        for d in DEPARTMENTS:
+            if d.key in dept_ids:
+                continue
+            row = await (
                 await conn.execute(
-                    "insert into public.agent_versions (agent_id, version, config_snapshot)"
-                    " values (%s, 1, %s)",
-                    (row["id"], Jsonb({**config, "tools": list(t.tools)})),
+                    "insert into public.departments (workspace_id, key, name)"
+                    " values (%s, %s, %s) returning id::text",
+                    (user.workspace_id, d.key, d.name),
                 )
-                if t.role == "chief":
-                    chief_id = row["id"]
-                elif t.role == "department_head":
-                    heads[t.department] = row["id"]
-                    await conn.execute(
-                        "update public.departments set manager_agent_id = %s where id = %s",
-                        (row["id"], dept_ids[t.department]),
-                    )
+            ).fetchone()
+            dept_ids[d.key] = row["id"]
+            new_depts += 1
+
+        heads = {t.department: t.key for t in AGENTS if t.role == "department_head"}
+        hired: list[str] = []
+        # Chief first, then heads, then specialists, so parents exist.
+        order = {"chief": 0, "verifier": 1, "department_head": 2, "specialist": 3}
+        for t in sorted(AGENTS, key=lambda a: order[a.role]):
+            if t.key in agent_ids:
+                continue
+            if t.role == "chief":
+                parent = None
+            elif t.role == "specialist" and t.department:
+                parent = agent_ids[heads[t.department]]
+            else:  # verifier, department heads, department-less specialists
+                parent = agent_ids["chief"]
+            config = {"description": t.description, **MODEL_PROFILES[t.model_profile]}
+            row = await (
+                await conn.execute(
+                    """insert into public.agents
+                           (workspace_id, department_id, parent_agent_id, name, role,
+                            status, template_key, model_profile, allowed_tools, config_json)
+                       values (%s, %s, %s, %s, %s, 'active', %s, %s, %s, %s)
+                       returning id::text""",
+                    (
+                        user.workspace_id,
+                        dept_ids[t.department] if t.department else None,
+                        parent,
+                        t.name,
+                        t.role,
+                        t.key,
+                        t.model_profile,
+                        list(t.tools),
+                        Jsonb(config),
+                    ),
+                )
+            ).fetchone()
+            agent_ids[t.key] = row["id"]
+            hired.append(t.key)
+            await conn.execute(
+                "insert into public.agent_versions (agent_id, version, config_snapshot)"
+                " values (%s, 1, %s)",
+                (row["id"], Jsonb({**config, "tools": list(t.tools)})),
+            )
+            if t.role == "department_head":
+                await conn.execute(
+                    "update public.departments set manager_agent_id = %s"
+                    " where id = %s and manager_agent_id is null",
+                    (row["id"], dept_ids[t.department]),
+                )
+        if hired or new_depts:
             await record_audit(
                 conn,
                 workspace_id=user.workspace_id,
                 actor_type="user",
                 actor_id=user.user_id,
-                action="workforce.bootstrapped",
-                event={"agents": len(agent_ids), "departments": len(dept_ids)},
+                action="workforce.hired",
+                event={"agents": hired, "departments_added": new_depts},
             )
     return await get_workforce(user, conn)
 

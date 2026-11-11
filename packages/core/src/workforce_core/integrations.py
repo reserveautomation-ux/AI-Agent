@@ -15,6 +15,7 @@ class Access(StrEnum):
     PARTNER_REQUIRED = "partner_required"  # API exists but needs a business partnership
     DEEP_LINK = "deep_link"  # no API: agent prepares, owner confirms in the provider app
     INTERNAL = "internal"  # built into this system
+    BROWSER = "browser"  # sandboxed browser, only on sites whose terms allow automation
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,45 @@ PROVIDERS: tuple[Provider, ...] = (
         "research",
         Access.OFFICIAL_API,
         "Server-side tools on the Claude API; no extra key needed.",
+    ),
+    Provider(
+        "claude_code",
+        "Claude code execution",
+        "compute",
+        Access.OFFICIAL_API,
+        "Sandboxed code runs on the Claude API: data analysis, charts, file conversion, "
+        "and Word/Excel/PowerPoint/PDF generation.",
+    ),
+    Provider(
+        "browser",
+        "Sandboxed browser",
+        "compute",
+        Access.BROWSER,
+        "Playwright in an isolated worker for pages that need a real browser. Form "
+        "submission only on sites whose terms permit automation; never stores passwords.",
+    ),
+    Provider(
+        "google_drive",
+        "Google Drive, Docs & Sheets",
+        "documents",
+        Access.OFFICIAL_API,
+        "Drive and Sheets APIs via Google OAuth (per-file or app-folder scope).",
+    ),
+    Provider(
+        "whatsapp",
+        "WhatsApp Business",
+        "communication",
+        Access.OFFICIAL_API,
+        "WhatsApp Cloud API needs a business number; messages to people who have not "
+        "written first must use pre-approved templates.",
+    ),
+    Provider(
+        "social",
+        "LinkedIn / X / Instagram",
+        "marketing",
+        Access.OFFICIAL_API,
+        "Official posting APIs; Instagram requires a business or creator account. "
+        "Each network needs its own app approval.",
     ),
     Provider(
         "gmail",
@@ -117,7 +157,7 @@ PROVIDERS: tuple[Provider, ...] = (
     ),
     Provider(
         "deep_links",
-        "Ola / Rapido / Swiggy / Zomato / BookMyShow",
+        "Ola / Rapido / Swiggy / Zomato / BookMyShow / Amazon / Flipkart",
         "commerce",
         Access.DEEP_LINK,
         "No public consumer ordering APIs. The agent finds options and prepares a link; "

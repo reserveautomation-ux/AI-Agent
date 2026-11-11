@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
+from workforce_core.capabilities import CAPABILITIES
 from workforce_core.db import record_audit
 from workforce_core.integrations import PROVIDERS
 from workforce_core.tools import TOOLS
@@ -85,4 +86,22 @@ async def list_integrations(user: UserDep) -> list[IntegrationOut]:
             tools=[t.name for t in TOOLS if t.provider == p.key],
         )
         for p in PROVIDERS
+    ]
+
+
+class CapabilityOut(BaseModel):
+    key: str
+    area: str
+    title: str
+    example: str
+    handling: str
+
+
+@router.get("/capabilities", response_model=list[CapabilityOut])
+async def list_capabilities(user: UserDep) -> list[CapabilityOut]:
+    return [
+        CapabilityOut(
+            key=c.key, area=c.area, title=c.title, example=c.example, handling=c.handling.value
+        )
+        for c in CAPABILITIES
     ]

@@ -12,16 +12,28 @@ something, or publishes needs your approval first. Work keeps going in the
 background when you close the app.
 
 ```
-You (owner)
+You (owner) — type or speak (12 languages incl. Hindi, Marathi, Tamil, Telugu, Bengali)
  └── Chief AI Executive ──── QA Verifier (independent)
-      ├── Personal Executive   → Email agent, Calendar agent
-      ├── Research & BD        → Web research agent
-      ├── Travel & Reservations→ Flights agent, Rides & tickets agent
-      ├── Shopping, Food       → Orders agent
-      ├── Financial Intel      → Market analyst, Order preparation agent
-      ├── Software Factory     → Engineer agent, Release agent (web, Play Store, App Store)
-      └── Operations
+      ├── General Task Agent   → anything no department covers (safe tools only)
+      ├── Personal Executive   → Email, Calendar, WhatsApp messaging
+      ├── Research & BD        → Web research
+      ├── Travel & Reservations→ Flights, Rides & tickets
+      ├── Shopping, Food       → Orders, Price watch
+      ├── Financial Intel      → Market analyst, Order preparation
+      ├── Software Factory     → Engineer, Release (web, Play Store, App Store)
+      ├── Marketing & Content  → Content writer, Social media
+      └── Operations, Data     → Data analyst, Documents, Web forms
 ```
+
+The command screen lists everything the workforce can do (`capabilities.py`),
+with how each is handled: *does it for you*, *asks before sending*, *needs your
+approval* or *you confirm in app*. That label is computed from the tools' risk
+tiers, so the screen can never promise more than the policy engine allows.
+
+"Do whatever I ask" comes from general-purpose tools rather than a fixed menu:
+web search and fetch, a sandboxed browser, sandboxed code execution (data
+analysis, charts, Word/Excel/PowerPoint/PDF), and long-term memory. Anything
+that sends, spends or publishes goes through the specialist that owns it.
 
 Defined in `packages/core/src/workforce_core/workforce.py`.
 
@@ -29,7 +41,7 @@ Defined in `packages/core/src/workforce_core/workforce.py`.
 
 | Layer | What | Where |
 |---|---|---|
-| Web app | Command center, task board, workforce, integrations, audit; installable on phones | `apps/web` (Next.js) |
+| Web app | Command center (typing + voice), task board, workforce, integrations, audit; installable on phones | `apps/web` (Next.js) |
 | API | Tasks, workforce lifecycle, kill switch, audit; Supabase JWT auth | `apps/api` (FastAPI) |
 | Domain core | State machine, policy engine, approvals, tool registry, lifecycle rules | `packages/core` |
 | Database | Postgres + Auth via Supabase; RLS; append-only logs | `supabase/migrations` |
@@ -88,13 +100,18 @@ See `integrations.py` and the **Integrations** page. Summary:
 | Want | How | Status |
 |---|---|---|
 | Research | Claude web search/fetch | Official API |
+| Data analysis, documents, charts | Claude code execution sandbox | Official API |
+| Pages needing a real browser, web forms | Sandboxed Playwright browser | Only on sites whose terms allow automation |
+| WhatsApp | WhatsApp Business Cloud API | Official API; business number + approved templates |
+| Social posts | LinkedIn / X / Instagram APIs | Official API; per-network app approval |
+| Google Drive / Sheets | Google APIs (OAuth) | Official API |
 | Email, calendar | Gmail / Google Calendar API (OAuth) | Official API |
 | Build & deploy websites | GitHub + Vercel APIs | Official API |
 | Play Store / App Store | Google Play Publishing API, App Store Connect API + macOS build runner | Official API; store review applies |
 | Stocks (India) | Zerodha Kite Connect (or similar broker API) | Official API, paid; SEBI algo rules apply, so research and alerts come first |
 | Flights | Duffel | Official API |
 | Trains | IRCTC | Authorised partners only |
-| Cabs (Uber/Ola/Rapido), food (Swiggy/Zomato), movies (BookMyShow) | No public consumer APIs | Agent prepares, **you confirm in the app** |
+| Cabs (Uber/Ola/Rapido), food (Swiggy/Zomato), movies (BookMyShow), shopping (Amazon/Flipkart) | No public consumer ordering APIs | Agent prepares, **you confirm in the app** |
 
 Re-check each provider's current terms before enabling it.
 
