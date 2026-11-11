@@ -1,0 +1,19 @@
+[project]
+name = "workforce-api"
+version = "0.1.0"
+description = "Task API, approvals and tool gateway for the Workforce OS"
+requires-python = ">=3.12"
+dependencies = [
+    "workforce-core",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "pyjwt[crypto]>=2.10",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/workforce_api"]
