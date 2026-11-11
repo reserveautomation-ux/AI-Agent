@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { post } from "@/lib/api";
 import { isNatural, useSpeak, useVoiceList, voicesFor, type VoicePrefs } from "@/lib/useSpeak";
 import { VOICE_LANGUAGES } from "@/lib/useSpeech";
+import { NATURAL_VOICES, naturalCovers, naturalVoice, useNaturalVoice } from "@/lib/naturalVoice";
 
 const NAME_IDEAS = ["Maya", "Aria", "Jarvis", "Kabir", "Ira", "Nova"];
 
@@ -24,6 +25,8 @@ export function AssistantSettings({
   const [draftName, setDraftName] = useState(name === "AI Assistant" ? "" : name);
   const [draftLang, setDraftLang] = useState(lang);
   const [draft, setDraft] = useState<VoicePrefs>(prefs);
+  const natural = useNaturalVoice();
+  const canNatural = naturalVoice.supported();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useVoiceList(); // re-render once the browser has loaded its voices
@@ -92,6 +95,74 @@ export function AssistantSettings({
           </select>
         </label>
 
+        <div className="field">
+          <span className="mono-label">Voice type</span>
+          <div className="engine-pick">
+            {canNatural && (
+              <button
+                type="button"
+                className={`engine ${draft.engine === "natural" ? "on" : ""}`}
+                onClick={() => {
+                  setDraft((d) => ({ ...d, engine: "natural" }));
+                  naturalVoice.load();
+                }}
+              >
+                <strong>Natural voice</strong>
+                <span>Built into the app · free · English · one-time download (~90 MB)</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className={`engine ${draft.engine !== "natural" ? "on" : ""}`}
+              onClick={() => setDraft((d) => ({ ...d, engine: "device" }))}
+            >
+              <strong>Device voices</strong>
+              <span>Already on this device · free · every language</span>
+            </button>
+          </div>
+        </div>
+
+        {draft.engine === "natural" ? (
+          <>
+            <label className="field">
+              <span className="mono-label">Natural voice</span>
+              <select value={draft.natural} onChange={(e) => setDraft((d) => ({ ...d, natural: e.target.value }))}>
+                {NATURAL_VOICES.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="natural-status">
+              {natural.status === "ready" && <span className="ok-dot">Ready · works offline on this device</span>}
+              {natural.status === "downloading" && (
+                <>
+                  <span>Downloading once… {Math.round(natural.progress * 100)}%</span>
+                  <progress max={1} value={natural.progress} />
+                </>
+              )}
+              {natural.status === "failed" && (
+                <span className="chat-error">
+                  Couldn&apos;t load it ({natural.error}).{" "}
+                  <button type="button" className="text-btn" onClick={() => naturalVoice.load()}>
+                    Try again
+                  </button>
+                </span>
+              )}
+              {natural.status === "idle" && (
+                <button type="button" className="text-btn" onClick={() => naturalVoice.load()}>
+                  Download the natural voice
+                </button>
+              )}
+            </div>
+            {!naturalCovers(draftLang) && (
+              <span className="hint">
+                The natural voice speaks English. For this language your device&apos;s voice is used.
+              </span>
+            )}
+          </>
+        ) : (
         <label className="field">
           <span className="mono-label">Voice</span>
           <select value={draft.voiceURI} onChange={(e) => setDraft((d) => ({ ...d, voiceURI: e.target.value }))}>
@@ -107,6 +178,8 @@ export function AssistantSettings({
             <span className="hint">This browser has no voice for this language yet; it will use its default.</span>
           )}
         </label>
+
+        )}
 
         <div className="sliders">
           <label className="field">

@@ -528,3 +528,16 @@ button.avatar { padding: 0; cursor: pointer; }
 .settings-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
 .save-btn { background: var(--p-teal); color: var(--p-teal-ink); border-radius: 999px; padding: 10px 26px; }
 @media (max-width: 520px) { .sliders { grid-template-columns: 1fr; } .settings-card { padding: 20px; } }
+.engine-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.engine {
+  text-align: left; display: grid; gap: 4px; background: var(--p-card); color: var(--p-ink);
+  border: 1.5px solid var(--p-line); border-radius: 16px; padding: 12px 14px; font-weight: 400;
+}
+.engine strong { font-weight: 600; }
+.engine span { color: var(--p-muted); font-size: 0.85rem; line-height: 1.4; }
+.engine.on { border-color: var(--p-teal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--p-teal) 18%, transparent); }
+.natural-status { display: grid; gap: 6px; font-size: 0.92rem; }
+.natural-status progress { width: 100%; accent-color: var(--p-teal); }
+.ok-dot { color: var(--ok); }
+.ok-dot::before { content: "● "; }
+@media (max-width: 520px) { .engine-pick { grid-template-columns: 1fr; } }

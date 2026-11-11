@@ -17,6 +17,7 @@ import {
   type Me,
 } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { naturalVoice } from "@/lib/naturalVoice";
 import { DEFAULT_VOICE, useSpeak, type VoicePrefs } from "@/lib/useSpeak";
 import { AssistantSettings } from "@/components/AssistantSettings";
 import { useSpeech, VOICE_LANGUAGES } from "@/lib/useSpeech";
@@ -96,7 +97,10 @@ export function Chat() {
   useEffect(() => {
     setLang(load("voice.lang", "en-IN"));
     setReadAloud(load("chat.readAloud", false));
-    setVoicePrefs(load("voice.prefs", DEFAULT_VOICE));
+    const prefs = { ...DEFAULT_VOICE, ...load("voice.prefs", DEFAULT_VOICE) };
+    setVoicePrefs(prefs);
+    // Already downloaded once: load the in-app natural voice from the browser's cache.
+    if (prefs.engine === "natural" && naturalVoice.supported()) naturalVoice.load();
     api<Me>("/me").then(setMe).catch(() => {});
     api<Conversation[]>("/conversations").then(setConversations).catch((e) => setError(e.message));
   }, []);

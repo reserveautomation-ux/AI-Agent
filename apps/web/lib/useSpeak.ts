@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { naturalCovers, naturalVoice } from "./naturalVoice";
 
 /** Turn chat text into something pleasant to hear (no markdown symbols or long links). */
 export function speakable(text: string): string {
@@ -15,12 +16,16 @@ export function speakable(text: string): string {
 }
 
 export interface VoicePrefs {
+  /** "natural": the free in-app voice (English, downloaded once); "device": this device's voices. */
+  engine: "device" | "natural";
+  /** In-app natural voice id (see NATURAL_VOICES). */
+  natural: string;
   /** A voice from speechSynthesis.getVoices(); empty: the best match for the language. */
   voiceURI: string;
   rate: number; // 0.5–2
-  pitch: number; // 0–2
+  pitch: number; // 0–2 (device voices only)
 }
-export const DEFAULT_VOICE: VoicePrefs = { voiceURI: "", rate: 1, pitch: 1 };
+export const DEFAULT_VOICE: VoicePrefs = { engine: "device", natural: "af_heart", voiceURI: "", rate: 1, pitch: 1 };
 
 /** How natural a free voice sounds: Edge "Natural/Online", Chrome "Google", Safari "Premium/Enhanced". */
 export function voiceScore(v: SpeechSynthesisVoice, lang: string): number {
@@ -103,6 +108,8 @@ export function useSpeak(prefs: VoicePrefs = DEFAULT_VOICE) {
   const [supported, setSupported] = useState(false);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const runRef = useRef(0);
+  // In-app natural voice: sentences are turned into audio in the background and played in order.
+  const nat = useRef({ items: [] as Promise<string | null>[], playing: false, audio: null as HTMLAudioElement | null });
   const q = useRef({
     queued: 0,
     done: 0,
@@ -121,10 +128,18 @@ export function useSpeak(prefs: VoicePrefs = DEFAULT_VOICE) {
     };
   }, []);
 
+  const stopNatural = () => {
+    nat.current.items = [];
+    nat.current.playing = false;
+    nat.current.audio?.pause();
+    nat.current.audio = null;
+  };
+
   const stop = useCallback(() => {
     runRef.current += 1;
     q.current.ended = true;
     window.speechSynthesis?.cancel();
+    stopNatural();
     setSpeakingId(null);
   }, []);
 
@@ -137,18 +152,67 @@ export function useSpeak(prefs: VoicePrefs = DEFAULT_VOICE) {
     cb?.();
   }, []);
 
+  const playNext = useCallback(
+    (run: number) => {
+      const n = nat.current;
+      const s = q.current;
+      const next = n.items.shift();
+      if (!next) {
+        n.playing = false;
+        return;
+      }
+      n.playing = true;
+      const done = () => {
+        if (run !== runRef.current) return;
+        s.done += 1;
+        finishIfDone(run);
+        playNext(run);
+      };
+      void next.then((url) => {
+        if (run !== runRef.current) {
+          if (url) URL.revokeObjectURL(url);
+          return;
+        }
+        if (!url) return done();
+        const a = new Audio(url);
+        n.audio = a;
+        a.onended = a.onerror = () => {
+          URL.revokeObjectURL(url);
+          done();
+        };
+        a.play().catch(() => {
+          URL.revokeObjectURL(url);
+          done();
+        });
+      });
+    },
+    [finishIfDone],
+  );
+
   const say = useCallback(
     (sentences: string[]) => {
       const synth = window.speechSynthesis;
       const s = q.current;
       const run = runRef.current;
-      const { rate, pitch } = prefsRef.current;
+      const { rate, pitch, engine, natural } = prefsRef.current;
+      const useNatural = engine === "natural" && naturalVoice.state.status === "ready" && naturalCovers(s.lang);
       for (const raw of sentences) {
         const fences = (raw.match(/```/g) ?? []).length;
         const skip = s.inCode;
         if (fences % 2) s.inCode = !s.inCode;
         const text = skip || fences ? "" : speakable(raw);
         if (!text) continue;
+        if (useNatural) {
+          s.queued += 1;
+          nat.current.items.push(
+            naturalVoice
+              .synth(text, natural, rate)
+              .then((blob) => URL.createObjectURL(blob))
+              .catch(() => null),
+          );
+          if (!nat.current.playing) playNext(run);
+          continue;
+        }
         const u = new SpeechSynthesisUtterance(text);
         u.lang = s.voice?.lang ?? s.lang;
         if (s.voice) u.voice = s.voice;
@@ -163,7 +227,7 @@ export function useSpeak(prefs: VoicePrefs = DEFAULT_VOICE) {
         synth.speak(u);
       }
     },
-    [finishIfDone],
+    [finishIfDone, playNext],
   );
 
   /** Start speaking a reply that is still arriving. */
@@ -171,6 +235,7 @@ export function useSpeak(prefs: VoicePrefs = DEFAULT_VOICE) {
     const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
     if (!synth) return;
     synth.cancel();
+    stopNatural();
     runRef.current += 1;
     const { voiceURI } = prefsRef.current;
     const voice = (voiceURI && synth.getVoices().find((v) => v.voiceURI === voiceURI)) || voicesFor(lang)[0] || null;
