@@ -3,14 +3,15 @@ name = "workforce-os"
 version = "0.1.0"
 description = "Autonomous AI Workforce OS - backend workspace root"
 requires-python = ">=3.12"
-dependencies = ["workforce-core", "workforce-api"]
+dependencies = ["workforce-core", "workforce-api", "workforce-worker"]
 
 [tool.uv.workspace]
-members = ["packages/core", "apps/api"]
+members = ["packages/core", "apps/api", "apps/worker"]
 
 [tool.uv.sources]
 workforce-core = { workspace = true }
 workforce-api = { workspace = true }
+workforce-worker = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -20,7 +21,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/core/tests", "apps/api/tests"]
+testpaths = ["packages/core/tests", "apps/api/tests", "apps/worker/tests"]
 addopts = "-ra"
 
 [tool.ruff]
