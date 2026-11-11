@@ -93,3 +93,5 @@ cd apps/web && npm run typecheck && npm run build
 
 Database tests run the real migrations, including RLS, the append-only audit log,
 the task state machine and the agent clone/retire guards.
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for everything the assistant can do today and what to add next (free and low-cost options first).

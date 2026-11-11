@@ -43,6 +43,7 @@ from workforce_core.secrets import SecretBox, SecretError, load_secret, update_s
 from workforce_core.tools import TOOLS_BY_NAME
 from workforce_core.verify import GITHUB_HEADERS, GRAPH
 
+from .artifacts import save_artifact
 from .browser import BrowserService
 
 ACTION_LABELS = {
@@ -429,6 +430,48 @@ async def drive_save(
         )
         saved.append(f"{made.get('name', title)}: {made.get('webViewLink', 'in your Drive')}")
     return "Saved to Google Drive:\n" + "\n".join(f"- {x}" for x in saved)
+
+
+# --- pictures (owner's own Cloudflare account) ---------------------------------------
+
+IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
+
+
+async def make_image(
+    conn: AsyncConnection, ws: str, args: dict[str, Any], integ: Integrations, task_id: str
+) -> str:
+    s = await open_session(conn, ws, "cloudflare_ai", integ)
+    prompt = " ".join(str(args.get("prompt", "")).split())[:2048]
+    if not prompt:
+        raise ValueError("describe the picture to make")
+
+    async def run():
+        resp = await s.http.post(
+            f"https://api.cloudflare.com/client/v4/accounts/{s.secret['account_id']}/ai/run/"
+            f"{IMAGE_MODEL}",
+            headers={"Authorization": f"Bearer {s.secret['api_token']}"},
+            json={"prompt": prompt, "steps": 4},
+            timeout=120,
+        )
+        body = _json_or_text(resp)
+        if resp.status_code in (401, 403):
+            raise GrantRevoked("Cloudflare token no longer valid")
+        if resp.status_code == 429 or "limit" in str(body.get("errors", "")).lower():
+            raise ActionFailed("today's free picture allowance is used up; it resets at 05:30 IST")
+        image = (body.get("result") or {}).get("image")
+        if resp.status_code >= 400 or not image:
+            errs = body.get("errors") or [{}]
+            raise ActionFailed(
+                f"Cloudflare couldn't make the picture: {errs[0].get('message', resp.text[:200])}"
+            )
+        return base64.b64decode(image)
+
+    data = await _call(s, run)
+    name = str(args.get("name") or prompt[:40]) or "picture"
+    art = await save_artifact(
+        conn, workspace_id=ws, task_id=task_id, step_id=None, name=name, fmt="jpg", data=data
+    )
+    return f"Made the picture and saved it as {art['name']} ({len(data) // 1024} KB)."
 
 
 # --- messaging ------------------------------------------------------------------------

@@ -101,12 +101,32 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "name": _S,
                 "format": {
                     "type": "string",
-                    "enum": ["csv", "markdown", "json", "html", "css", "js", "txt"],
+                    "enum": ["csv", "markdown", "json", "html", "css", "js", "txt", "svg"],
                 },
                 "content": _S,
             },
             "required": ["name", "format", "content"],
             "additionalProperties": False,
+        },
+    ),
+    ToolSpec(
+        "make_image",
+        "creative",
+        "Create a picture from a description (photo-like or illustration) and save it as a "
+        "JPEG file in this task. Uses the owner's own Cloudflare AI account (free daily "
+        "allowance). For logos, icons and diagrams prefer an SVG file via create_document.",
+        T.INTERNAL_WRITE,
+        "cloudflare_ai",
+        {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Detailed description, max 2000 chars.",
+                },
+                "name": {"type": "string", "description": "File name, e.g. cafe-poster"},
+            },
+            "required": ["prompt"],
         },
     ),
     ToolSpec(
@@ -157,7 +177,7 @@ TOOLS: tuple[ToolSpec, ...] = (
                 "name": _S,
                 "format": {
                     "type": "string",
-                    "enum": ["csv", "markdown", "json", "html", "css", "js", "txt"],
+                    "enum": ["csv", "markdown", "json", "html", "css", "js", "txt", "svg"],
                 },
                 "content": _S,
             },

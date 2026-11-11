@@ -33,6 +33,7 @@ from .executor import (
     inbox_draft,
     inbox_read,
     inbox_search,
+    make_image,
 )
 from .prompts import untrusted
 
@@ -43,6 +44,7 @@ CONNECTED_TOOLS = {
     "gmail_read",
     "gmail_create_draft",
     "save_to_drive",
+    "make_image",
 }
 
 # Tools executed by Anthropic's servers (declared, not run by us).
@@ -374,6 +376,8 @@ class ToolGateway:
                     return untrusted("gmail", await inbox_read(self.conn, ws, args, integ))
                 if name == "gmail_create_draft":
                     return await inbox_draft(self.conn, ws, args, integ)
+                if name == "make_image":
+                    return await make_image(self.conn, ws, args, integ, self.ctx.task_id)
                 return await drive_save(self.conn, ws, args, integ, self.ctx.task_id)
             except NotConnected as exc:
                 if exc.fixable and exc.connector:

@@ -367,3 +367,77 @@ def test_without_encryption_key_it_is_not_fixable(database_url, workspace):
     with pytest.raises(NotConnected) as exc:
         asyncio.run(go())
     assert not exc.value.fixable and "set up on the server" in str(exc.value)
+
+
+# --- pictures (Cloudflare AI) -----------------------------------------------------------
+
+JPEG = b"\xff\xd8\xff\xe0" + b"j" * 500
+
+
+def _make_image(database_url, db, workspace, handler, connect=True):
+    from workforce_worker.executor import make_image
+
+    task = new_task(db, workspace, "Poster")
+
+    async def go():
+        async with await psycopg.AsyncConnection.connect(
+            database_url, autocommit=True, row_factory=dict_row
+        ) as c:
+            if connect:
+                await _connect(
+                    c,
+                    workspace.id,
+                    "cloudflare_ai",
+                    {"account_id": "acc123456789abcdef", "api_token": "cf"},
+                    "cf",
+                )
+            return await make_image(
+                c,
+                workspace.id,
+                {"prompt": "Diwali sale poster, warm lights", "name": "diwali poster"},
+                _integ(Fake(handler)),
+                task,
+            )
+
+    return task, asyncio.run(go())
+
+
+def test_make_image_saves_a_jpeg(database_url, db, workspace):
+    seen = []
+
+    def ok(req):
+        seen.append(req)
+        return httpx.Response(
+            200, json={"success": True, "result": {"image": base64.b64encode(JPEG).decode()}}
+        )
+
+    task, text = _make_image(database_url, db, workspace, ok)
+    assert text.startswith("Made the picture and saved it as diwali_poster.jpg")
+    req = seen[0]
+    assert (
+        req.url.path
+        == "/client/v4/accounts/acc123456789abcdef/ai/run/@cf/black-forest-labs/flux-1-schnell"
+    )
+    assert req.headers["authorization"] == "Bearer cf"
+    assert json.loads(req.content) == {"prompt": "Diwali sale poster, warm lights", "steps": 4}
+    row = db.execute(
+        "select name, file_type, content, preview from artifacts where task_id = %s", (task,)
+    ).fetchone()
+    assert row[0] == "diwali_poster.jpg" and row[1] == "image/jpeg" and bytes(row[2]) == JPEG
+    assert row[3] == "[image]"
+
+
+def test_make_image_limits_and_bad_token(database_url, db, workspace):
+    def limit(req):
+        return httpx.Response(429, json={"success": False, "errors": [{"message": "daily limit"}]})
+
+    with pytest.raises(ActionFailed, match="allowance is used up"):
+        _make_image(database_url, db, workspace, limit)
+
+    def denied(req):
+        return httpx.Response(401, json={"success": False, "errors": [{"message": "bad token"}]})
+
+    with pytest.raises(NotConnected) as exc:
+        _make_image(database_url, db, workspace, denied, connect=False)
+    assert exc.value.fixable  # still connected from above -> marked expired, reconnect fixes it
+    assert _status(db, workspace.id, "cloudflare_ai")[0] == "expired"

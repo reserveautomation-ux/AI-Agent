@@ -67,6 +67,14 @@ CAPABILITIES: tuple[Capability, ...] = (
         "List 30 interior designers in Pune with website and phone, as a spreadsheet",
         ("web_search", "web_fetch", "create_document"),
     ),
+    # Creative
+    C(
+        "pictures",
+        "Create",
+        "Make pictures, posters and logos",
+        "Make a Diwali sale poster for my café and a simple logo",
+        ("make_image", "create_document"),
+    ),
     # Inbox
     C(
         "inbox",

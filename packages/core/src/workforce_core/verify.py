@@ -62,7 +62,29 @@ async def _vercel(http: httpx.AsyncClient, f: dict[str, str]) -> tuple[str, str]
     return str(user.get("id", "")), user.get("username") or user.get("email") or "Vercel"
 
 
+CLOUDFLARE_API = "https://api.cloudflare.com/client/v4"
+
+
+async def _cloudflare(http: httpx.AsyncClient, f: dict[str, str]) -> tuple[str, str]:
+    account = "".join(ch for ch in f["account_id"] if ch.isalnum())
+    if len(account) < 16:
+        raise ValueError("That Account ID looks too short. Copy it from Workers AI → Use REST API.")
+    resp = await http.get(
+        f"{CLOUDFLARE_API}/accounts/{account}/ai/models/search",
+        params={"per_page": 1},
+        headers={"Authorization": f"Bearer {f['api_token']}"},
+    )
+    body = resp.json() if resp.content else {}
+    if resp.status_code >= 400 or not body.get("success"):
+        raise ValueError(
+            "Cloudflare didn't accept that token and Account ID. Create a 'Workers AI' API token "
+            "and copy the Account ID from the same page."
+        )
+    return account, f"Cloudflare account ••{account[-4:]}"
+
+
 CHECKERS: dict[str, Checker] = {
+    "cloudflare_ai": _cloudflare,
     "telegram": _telegram,
     "whatsapp": _whatsapp,
     "github": _github,

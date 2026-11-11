@@ -15,6 +15,9 @@ CONTENT_TYPES = {
     "css": "text/css",
     "js": "text/javascript",
     "txt": "text/plain",
+    "svg": "image/svg+xml",
+    "jpg": "image/jpeg",
+    "png": "image/png",
 }
 EXTENSIONS = {
     "csv": "csv",
@@ -24,7 +27,11 @@ EXTENSIONS = {
     "css": "css",
     "js": "js",
     "txt": "txt",
+    "svg": "svg",
+    "jpg": "jpg",
+    "png": "png",
 }
+BINARY = {"jpg", "png"}
 MAX_BYTES = 5 * 1024 * 1024
 
 
@@ -51,11 +58,15 @@ async def save_artifact(
     step_id: str | None,
     name: str,
     fmt: str,
-    content: str,
+    content: str = "",
+    data: bytes | None = None,
 ) -> dict:
+    """Save a deliverable: text `content`, or raw `data` for images."""
     if fmt not in CONTENT_TYPES:
         raise ValueError(f"unsupported format {fmt!r}")
-    data = content.encode()
+    if fmt in BINARY and data is None:
+        raise ValueError(f"{fmt} files need image data")
+    data = data if data is not None else content.encode()
     if len(data) > MAX_BYTES:
         raise ValueError("file is larger than 5 MB")
     filename = safe_name(name, fmt)
@@ -75,7 +86,7 @@ async def save_artifact(
                 hashlib.sha256(data).hexdigest(),
                 len(data),
                 data,
-                content[:2000],
+                "[image]" if fmt in BINARY else content[:2000],
             ),
         )
     ).fetchone()

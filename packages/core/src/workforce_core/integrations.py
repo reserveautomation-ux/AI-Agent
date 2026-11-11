@@ -96,6 +96,14 @@ PROVIDERS: tuple[Provider, ...] = (
         "Sign in with Slack; posts approved messages to channels.",
     ),
     Provider(
+        "cloudflare_ai",
+        "Cloudflare AI (pictures)",
+        "creative",
+        Access.OFFICIAL_API,
+        "Owner's own Cloudflare account; Workers AI image model (FLUX.1 schnell). Free "
+        "allowance of 10,000 'neurons' a day, about 230 pictures at default settings.",
+    ),
+    Provider(
         "gmail_inbox",
         "Gmail inbox",
         "communication",

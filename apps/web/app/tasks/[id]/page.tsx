@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import {
   api,
+  artifactImageUrl,
   downloadArtifact,
   joinNames,
   post,
@@ -19,6 +20,23 @@ import {
 const TERMINAL = new Set(["completed", "cancelled", "expired"]);
 const WORKING = new Set(["draft", "planned", "queued", "running", "verifying"]);
 
+
+function ArtifactImage({ a }: { a: Artifact }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let made: string | null = null;
+    artifactImageUrl(a)
+      .then((u) => {
+        made = u;
+        setUrl(u);
+      })
+      .catch(() => {});
+    return () => {
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [a]);
+  return url ? <img src={url} alt={a.name} className="artifact-img" /> : <p className="muted small">Loading picture…</p>;
+}
 
 function CsvPreview({ text }: { text: string }) {
   const rows = text
@@ -64,7 +82,9 @@ function FileCard({ a, onError }: { a: Artifact; onError: (m: string) => void })
         </button>
       </div>
       <span className="muted small">{(a.size_bytes / 1024).toFixed(1)} KB</span>
-      {a.file_type === "text/csv" && a.preview ? (
+      {a.file_type.startsWith("image/") ? (
+        <ArtifactImage a={a} />
+      ) : a.file_type === "text/csv" && a.preview ? (
         <CsvPreview text={a.preview} />
       ) : (
         a.preview && <pre className="preview">{a.preview.slice(0, 600)}</pre>

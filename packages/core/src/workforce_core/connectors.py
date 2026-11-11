@@ -85,6 +85,7 @@ CATEGORY_WORDS = {
     "Communication": "email mail message chat text sms calendar meeting schedule invite team",
     "Build & deploy": "website site app code repository host publish deploy launch store",
     "Documents": "files docs notes drive storage",
+    "Images & media": "picture photo image poster logo design art illustration banner thumbnail",
     "Money": "stocks shares invest trading broker portfolio",
     "Travel": "flight hotel trip travel booking",
     "Marketing": "social post instagram linkedin twitter x facebook",
@@ -260,6 +261,30 @@ CONNECTORS: tuple[Connector, ...] = (
         ("deploy_web",),
         fields=(KeyField("token", "Access token", placeholder="vercel token"),),
         how_to_get="Vercel → Account settings → Tokens → Create.",
+    ),
+    C(
+        "cloudflare_ai",
+        "Pictures (Cloudflare AI)",
+        "Images & media",
+        "🎨",
+        "Agents create pictures, posters and illustrations from a description, using your own "
+        "free Cloudflare account (about 230 pictures a day free).",
+        A.API_KEY,
+        True,
+        ("make_image",),
+        fields=(
+            KeyField(
+                "account_id",
+                "Account ID",
+                secret=False,
+                help="Workers AI → Use REST API",
+                placeholder="32 letters and numbers",
+            ),
+            KeyField("api_token", "API token", help="'Workers AI' token", placeholder="token"),
+        ),
+        how_to_get="Free: sign up at cloudflare.com → Workers AI → Use REST API → Create a Workers "
+        "AI API Token (copy it), and copy the Account ID shown on the same page.",
+        note="Free allowance resets daily; logos, icons and diagrams are made as SVG without it.",
     ),
     C(
         "google_play",

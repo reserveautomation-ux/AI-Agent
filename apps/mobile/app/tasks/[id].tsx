@@ -1,10 +1,11 @@
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
 import { Badge, Button, Card, ErrorText, H, Input, T, styles } from '@/components/ui';
 import { ApprovalCard } from '@/components/ApprovalCard';
-import { api, post, shareArtifact, type ApprovalItem, type TaskDetail } from '@/lib/api';
+import { API_URL, api, post, shareArtifact, type ApprovalItem, type TaskDetail } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import { joinNames, serviceName } from '@/lib/labels';
 import { useTheme } from '@/lib/theme';
 
@@ -227,7 +228,9 @@ export default function TaskScreen() {
                   onPress={() => shareArtifact(a).catch((e) => setError(e.message))}
                 />
               </View>
-              {a.file_type === 'text/csv' && a.preview ? (
+              {a.file_type.startsWith('image/') ? (
+                <ArtifactImage id={a.id} name={a.name} />
+              ) : a.file_type === 'text/csv' && a.preview ? (
                 <CsvTable text={a.preview} />
               ) : (
                 a.preview && (
@@ -303,5 +306,32 @@ export default function TaskScreen() {
         </View>
       ))}
     </ScrollView>
+  );
+}
+
+/** A picture made in the task (loaded with the sign-in token). */
+function ArtifactImage({ id, name }: { id: string; name: string }) {
+  const [src, setSrc] = useState<{ uri: string; headers?: Record<string, string> } | null>(null);
+  useEffect(() => {
+    let gone = false;
+    supabase.auth.getSession().then(async ({ data }) => {
+      const headers = { Authorization: `Bearer ${data.session?.access_token ?? ''}` };
+      const uri = `${API_URL}/artifacts/${id}`;
+      if (Platform.OS !== 'web') return !gone && setSrc({ uri, headers });
+      const res = await fetch(uri, { headers });
+      if (!gone && res.ok) setSrc({ uri: URL.createObjectURL(await res.blob()) });
+    });
+    return () => {
+      gone = true;
+    };
+  }, [id]);
+  if (!src) return null;
+  return (
+    <Image
+      source={src}
+      accessibilityLabel={name}
+      resizeMode="contain"
+      style={{ width: '100%', height: 260, borderRadius: 12, marginTop: 8 }}
+    />
   );
 }

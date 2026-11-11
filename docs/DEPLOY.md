@@ -179,6 +179,7 @@ find it):
 | WhatsApp | Meta access token + phone number ID (WhatsApp Business Platform) | Message people who wrote to them in the last 24 hours |
 | GitHub | Fine-grained token (Contents + Administration: read/write) | Create a repository and save the website/app files a task made |
 | Vercel | Account token | Publish a website a task made, at a `*.vercel.app` address |
+| Pictures (Cloudflare AI) | Account ID + Workers AI API token (free account) | Make pictures and posters (~230 a day free) |
 
 **Chat with the assistant from Telegram (free):** set `PUBLIC_API_URL` on **workforce-api**
 to its public `https://` address. People connect their own bot (Telegram row above), then

@@ -137,6 +137,16 @@ export interface TaskDetail extends Task {
 }
 
 /** Download a file through the authenticated API. */
+/** A picture made in a task, as a temporary object URL (needs the sign-in token). */
+export async function artifactImageUrl(a: Artifact): Promise<string> {
+  const { data } = await supabase().auth.getSession();
+  const res = await fetch(`${API_URL}/artifacts/${a.id}`, {
+    headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+  });
+  if (!res.ok) throw new ApiError(res.status, "Couldn't load the picture");
+  return URL.createObjectURL(await res.blob());
+}
+
 export async function downloadArtifact(a: Artifact) {
   const { data } = await supabase().auth.getSession();
   const res = await fetch(`${API_URL}/artifacts/${a.id}`, {

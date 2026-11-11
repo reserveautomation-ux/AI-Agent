@@ -64,6 +64,7 @@ GENERAL = (
     "run_code",
     "create_document",
     "save_to_drive",
+    "make_image",
 )
 
 _AGENT_DEFS: tuple[AgentTemplate, ...] = (
