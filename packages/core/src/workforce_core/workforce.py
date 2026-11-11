@@ -9,7 +9,7 @@ the tools listed here; the policy engine still decides per call whether a tool
 runs, waits for your approval, or is denied.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from .tools import TOOLS_BY_NAME
@@ -58,7 +58,7 @@ A = AgentTemplate
 # Safe general-purpose tools (tiers 0-1) any capable agent may use.
 GENERAL = ("web_search", "web_fetch", "browse_page", "recall", "run_code", "create_document")
 
-AGENTS: tuple[AgentTemplate, ...] = (
+_AGENT_DEFS: tuple[AgentTemplate, ...] = (
     A(
         "chief",
         "Chief AI Executive",
@@ -290,6 +290,13 @@ AGENTS: tuple[AgentTemplate, ...] = (
         "Fills online forms on sites that allow it, with your approval before submitting.",
         ("browse_page", "browser_submit_form", "recall"),
     ),
+)
+
+# Every agent has its own memory: it can recall what the workforce knows and
+# save its own learnings (or facts about the owner, marked unverified).
+MEMORY_TOOLS = ("recall", "remember")
+AGENTS: tuple[AgentTemplate, ...] = tuple(
+    replace(a, tools=tuple(dict.fromkeys((*a.tools, *MEMORY_TOOLS)))) for a in _AGENT_DEFS
 )
 
 

@@ -10,8 +10,8 @@ from workforce_worker.browser import (
     BrowserService,
     DomainPolicy,
     check_url,
+    url_guard,
 )
-from workforce_worker.browser import url_guard
 
 PAGES = {
     "/": """<html><head><title>Fitness Creators Mumbai</title></head><body>

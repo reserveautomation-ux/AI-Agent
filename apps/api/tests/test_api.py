@@ -292,3 +292,35 @@ def test_confirming_agent_memory_makes_it_trusted(client, make_user, db):
     ).fetchone()[0]
     assert not client.get("/memories", headers=h).json()[0]["trusted"]
     assert client.post(f"/memories/{mid}/confirm", headers=h).json()["trusted"]
+
+
+def test_task_detail_retry_and_download(client, make_user, db):
+    h = auth(make_user())
+    task = client.post("/tasks", json={"objective": "List creators"}, headers=h).json()
+    ws = client.get("/me", headers=h).json()["workspace"]["id"]
+
+    # Simulate a worker that got blocked on budget after saving a file.
+    db.execute(
+        "insert into artifacts (workspace_id, task_id, name, storage_uri, file_type,"
+        " checksum_sha256, size_bytes, content, preview) values (%s, %s, 'list.csv', 'inline',"
+        " 'text/csv', 'x', 7, convert_to('a,b', 'UTF8'), 'a,b')",
+        (ws, task["id"]),
+    )
+    db.execute("update tasks set status = 'planned' where id = %s", (task["id"],))
+    db.execute(
+        "update tasks set status = 'blocked', result_summary = 'budget reached' where id = %s",
+        (task["id"],),
+    )
+
+    detail = client.get(f"/tasks/{task['id']}", headers=h).json()
+    assert detail["status"] == "blocked" and detail["artifacts"][0]["name"] == "list.csv"
+    art_id = detail["artifacts"][0]["id"]
+    r = client.get(f"/artifacts/{art_id}", headers=h)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert "list.csv" in r.headers["content-disposition"]
+    assert client.get(f"/artifacts/{art_id}", headers=auth(make_user())).status_code == 404
+
+    r = client.post(f"/tasks/{task['id']}/retry", json={"answer": "Only Mumbai"}, headers=h)
+    assert r.status_code == 200 and r.json()["status"] == "planned"  # no steps yet -> re-plan
+    assert "Owner's answer: Only Mumbai" in r.json()["objective"]
+    assert client.post(f"/tasks/{task['id']}/retry", headers=h).status_code == 409

@@ -57,7 +57,19 @@ TOOLS: tuple[ToolSpec, ...] = (
         "Open a page in a sandboxed browser and read it (JavaScript-heavy sites).",
         T.READ,
         "browser",
-        _obj(url=_S),
+        {
+            "type": "object",
+            "properties": {
+                "url": _S,
+                "follow_links": {
+                    "type": "array",
+                    "items": _S,
+                    "description": "Visible link texts to click through in order (optional)",
+                },
+            },
+            "required": ["url"],
+            "additionalProperties": False,
+        },
     ),
     ToolSpec(
         "recall",
@@ -79,10 +91,20 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "create_document",
         "artifacts",
-        "Create a Word, PDF, Excel or PowerPoint file.",
+        "Create a document file. Word/PDF/Excel/PowerPoint export is coming; for now "
+        "write Markdown, HTML or CSV.",
         T.INTERNAL_WRITE,
-        "claude_code",
-        _obj(name=_S, format=_S, instructions=_S),
+        "internal",
+        {
+            "type": "object",
+            "properties": {
+                "name": _S,
+                "format": {"type": "string", "enum": ["csv", "markdown", "json", "html"]},
+                "content": _S,
+            },
+            "required": ["name", "format", "content"],
+            "additionalProperties": False,
+        },
     ),
     ToolSpec(
         "save_to_drive",
@@ -111,10 +133,19 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "create_report",
         "artifacts",
-        "Write a CSV/XLSX/Markdown report artifact.",
+        "Save a report file (CSV, Markdown, JSON or HTML) as the task deliverable.",
         T.INTERNAL_WRITE,
         "internal",
-        _obj(name=_S, format=_S, content=_S),
+        {
+            "type": "object",
+            "properties": {
+                "name": _S,
+                "format": {"type": "string", "enum": ["csv", "markdown", "json", "html"]},
+                "content": _S,
+            },
+            "required": ["name", "format", "content"],
+            "additionalProperties": False,
+        },
     ),
     ToolSpec(
         "draft_email",
@@ -127,10 +158,27 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "remember",
         "memory",
-        "Save a fact or preference to long-term memory.",
+        "Save something worth remembering to long-term memory.",
         T.INTERNAL_WRITE,
         "internal",
-        _obj(memory_type=_S, content=_S),
+        {
+            "type": "object",
+            "properties": {
+                "content": _S,
+                "memory_type": {
+                    "type": "string",
+                    "enum": ["preference", "fact", "contact", "learning"],
+                },
+                "about": {
+                    "type": "string",
+                    "enum": ["owner", "my_work"],
+                    "description": "'owner' = about the owner (shared with all agents); "
+                    "'my_work' = a private lesson for doing your own job better",
+                },
+            },
+            "required": ["content", "memory_type", "about"],
+            "additionalProperties": False,
+        },
     ),
     ToolSpec(
         "git_commit_push",
@@ -193,7 +241,7 @@ TOOLS: tuple[ToolSpec, ...] = (
         "prepare_booking_link",
         "commerce",
         "Prepare a ride, food, movie or shopping order for you to confirm in the provider app.",
-        T.EXTERNAL_COMMITMENT,
+        T.INTERNAL_WRITE,
         "deep_links",
         _obj(provider=_S, details=_S),
     ),

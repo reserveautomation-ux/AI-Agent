@@ -56,3 +56,21 @@ async def record_audit(
         " values (%s, %s, %s, %s, %s, %s, %s)",
         (workspace_id, actor_type, actor_id, action, target_type, target_id, Jsonb(event or {})),
     )
+
+
+async def sync_tool_definitions(conn: AsyncConnection) -> None:
+    """Upsert the code-defined tool registry into public.tool_definitions."""
+    from .tools import TOOLS
+
+    async with conn.transaction():
+        for t in TOOLS:
+            await conn.execute(
+                """insert into public.tool_definitions
+                       (name, category, description, risk_tier, input_schema, enabled)
+                   values (%s, %s, %s, %s, %s, true)
+                   on conflict (name) do update set
+                       category = excluded.category, description = excluded.description,
+                       risk_tier = excluded.risk_tier, input_schema = excluded.input_schema,
+                       updated_at = now()""",
+                (t.name, t.category, t.description, int(t.risk_tier), Jsonb(t.input_schema)),
+            )

@@ -4,7 +4,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 from workforce_core.memory import (
-    MemoryError,
+    MemoryRejected,
     find_secrets,
     format_for_prompt,
     recall,
@@ -119,7 +119,7 @@ def test_memory_guards(database_url, db, make_user):
     agent = _agent(db, ws)
 
     async def scenario(conn):
-        with pytest.raises(MemoryError, match="password"):
+        with pytest.raises(MemoryRejected, match="password"):
             await remember(
                 conn,
                 workspace_id=ws,
@@ -128,7 +128,7 @@ def test_memory_guards(database_url, db, make_user):
                 source_type="user",
             )
         # An agent can't plant standing instructions (prompt-injection defence).
-        with pytest.raises(MemoryError, match="only the owner"):
+        with pytest.raises(MemoryRejected, match="only the owner"):
             await remember(
                 conn,
                 workspace_id=ws,

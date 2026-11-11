@@ -22,7 +22,7 @@ SourceType = Literal["user", "agent", "system"]
 MEMORY_TYPES: tuple[str, ...] = MemoryType.__args__  # type: ignore[attr-defined]
 
 
-class MemoryError(ValueError):
+class MemoryRejected(ValueError):
     pass
 
 
@@ -107,20 +107,20 @@ async def remember(
     """Store a memory. Returns (memory_id, created) - created is False when merged."""
     content = " ".join(content.split())
     if not content:
-        raise MemoryError("memory is empty")
+        raise MemoryRejected("memory is empty")
     if len(content) > 4000:
-        raise MemoryError("memory is too long (max 4000 characters)")
+        raise MemoryRejected("memory is too long (max 4000 characters)")
     if memory_type not in MEMORY_TYPES:
-        raise MemoryError(f"unknown memory type {memory_type!r}")
+        raise MemoryRejected(f"unknown memory type {memory_type!r}")
     if secrets := find_secrets(content):
-        raise MemoryError(
+        raise MemoryRejected(
             f"refusing to store a {', '.join(secrets)} in memory; "
             "connect the account securely instead"
         )
     if memory_type == "instruction" and source_type != "user":
-        raise MemoryError("only the owner can create standing instructions")
+        raise MemoryRejected("only the owner can create standing instructions")
     if agent_scope and not agent_id:
-        raise MemoryError("agent-scoped memory needs an agent")
+        raise MemoryRejected("agent-scoped memory needs an agent")
 
     scope = "agent" if agent_scope else "workspace"
     trusted = source_type == "user"

@@ -5,10 +5,12 @@ agents → verified result, with your approval wherever money or commitments are
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, safety model and roadmap.
 
-**Status: phase 1 (foundation).** You can sign in, give instructions by typing
-or by voice (stored as durable tasks), see everything the workforce can do,
-hire the 28-agent workforce, clone/suspend/retire agents, use the kill switch and
-read the audit log. Agents start executing tasks in phase 2.
+**Status: phase 2 (agents at work).** Give an instruction by typing or voice.
+The Chief AI Executive plans it, specialist agents do the steps with real tools
+(web search, a sandboxed browser, memory, reports), the QA Verifier checks the
+result, and you get a summary plus downloadable files. Work runs in the
+background and survives restarts. Anything that sends, books, buys or publishes
+is prepared and held for your approval (one-tap approvals come in phase 3).
 
 Voice input uses the browser's built-in speech recognition (Chrome, Edge,
 Safari, Android, iPhone). Firefox doesn't support it yet; typing still works there.
@@ -16,6 +18,7 @@ Safari, Android, iPhone). Firefox doesn't support it yet; typing still works the
 ```
 apps/web        Next.js web app (works on phones; add to home screen)
 apps/api        FastAPI backend
+apps/worker     Background agents: planner, specialists, verifier, browser, tool gateway
 packages/core   Shared domain logic (state machine, policy, approvals, workforce, lifecycle)
 supabase/       Database migrations
 ```
@@ -46,7 +49,18 @@ cd apps/api && uv run uvicorn --factory workforce_api.main:app_factory --reload 
 
 API docs: http://localhost:8000/docs
 
-### 3. Web
+### 3. Worker (the agents)
+
+```bash
+cp apps/worker/.env.example apps/worker/.env   # DATABASE_URL + ANTHROPIC_API_KEY
+uv run playwright install --with-deps chromium  # once, for the agent browser
+cd apps/worker && uv run python -m workforce_worker
+```
+
+Run as many workers as you like; each task is handled by one worker at a time
+and resumes elsewhere if a worker stops.
+
+### 4. Web
 
 ```bash
 cd apps/web

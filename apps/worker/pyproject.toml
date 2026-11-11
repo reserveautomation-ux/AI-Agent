@@ -5,6 +5,7 @@ description = "Background agent workers: task execution, browser, tool gateway"
 requires-python = ">=3.12"
 dependencies = [
     "workforce-core",
+    "anthropic>=0.80",
     "playwright>=1.55",
     "pydantic-settings>=2.6",
 ]

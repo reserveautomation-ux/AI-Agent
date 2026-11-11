@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from psycopg import errors as pg_errors
 from pydantic import BaseModel, Field
 from workforce_core.db import record_audit
-from workforce_core.memory import MemoryError, recall, remember
+from workforce_core.memory import MemoryRejected, recall, remember
 
 from ..auth import UserDep
 from ..deps import ConnDep
@@ -125,7 +125,7 @@ async def create_memory(body: MemoryCreate, user: UserDep, conn: ConnDep) -> Mem
                 importance=body.importance,
                 pinned=body.pinned,
             )
-        except MemoryError as exc:
+        except MemoryRejected as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
         await record_audit(
             conn,

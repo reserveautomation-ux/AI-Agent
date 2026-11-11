@@ -46,6 +46,7 @@ class TaskOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    cost_usd: Decimal = Decimal(0)
 
 
 class TaskEventOut(BaseModel):
@@ -58,8 +59,55 @@ class TaskEventOut(BaseModel):
     created_at: datetime
 
 
+class StepOut(BaseModel):
+    sequence: int
+    title: str | None
+    status: str
+    agent_id: str | None
+    agent_name: str | None
+    summary: str | None
+    result: str | None
+    limitations: list[str] = []
+    error: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+
+
+class ArtifactOut(BaseModel):
+    id: str
+    name: str
+    file_type: str
+    size_bytes: int
+    preview: str | None
+    created_at: datetime
+
+
+class ApprovalOut(BaseModel):
+    id: str
+    action: str
+    action_payload: dict[str, Any]
+    amount: Decimal | None
+    currency: str | None
+    recipient: str | None
+    risk_tier: int
+    status: str
+    expires_at: datetime
+    created_at: datetime
+
+
 class TaskDetail(TaskOut):
     events: list[TaskEventOut]
+    plan: dict[str, Any] | None = None
+    verification: dict[str, Any] | None = None
+    last_error: str | None = None
+    steps: list[StepOut] = []
+    artifacts: list[ArtifactOut] = []
+    approvals: list[ApprovalOut] = []
+
+
+class RetryRequest(BaseModel):
+    answer: str | None = Field(default=None, max_length=2000)
+    budget_limit_usd: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=4)
 
 
 class CancelRequest(BaseModel):

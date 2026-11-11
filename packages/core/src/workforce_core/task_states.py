@@ -35,7 +35,7 @@ TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
     S.WAITING_FOR_TOOL: frozenset({S.RUNNING, S.FAILED, S.CANCELLED, S.EXPIRED}),
     S.WAITING_FOR_APPROVAL: frozenset({S.RUNNING, S.FAILED, S.CANCELLED, S.EXPIRED}),
     # A task reaches COMPLETED only through VERIFYING ("definition of done").
-    S.VERIFYING: frozenset({S.COMPLETED, S.RUNNING, S.FAILED}),
+    S.VERIFYING: frozenset({S.COMPLETED, S.RUNNING, S.FAILED, S.WAITING_FOR_APPROVAL}),
     S.BLOCKED: frozenset({S.PLANNED, S.QUEUED, S.RUNNING, S.FAILED, S.CANCELLED}),
     S.FAILED: frozenset({S.QUEUED}),  # safe replay from dead-letter
     S.COMPLETED: frozenset(),

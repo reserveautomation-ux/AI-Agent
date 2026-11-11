@@ -45,7 +45,7 @@ Defined in `packages/core/src/workforce_core/workforce.py`.
 | API | Tasks, workforce lifecycle, kill switch, audit; Supabase JWT auth | `apps/api` (FastAPI) |
 | Domain core | State machine, policy engine, approvals, tool registry, lifecycle rules | `packages/core` |
 | Database | Postgres + Auth via Supabase; RLS; append-only logs | `supabase/migrations` |
-| Workers *(week 2)* | Durable workflows running the agents | `apps/worker` (Temporal) |
+| Workers | Plan → do → verify pipeline, agent browser, tool gateway, memory | `apps/worker` |
 | Mobile *(phase 2)* | Native app with push notifications for approvals | `apps/mobile` (Expo) |
 
 ## Safety model
@@ -74,6 +74,30 @@ reach `completed` from `verifying`. Every status change is logged.
 database triggers that apply to every role.
 
 **Kill switch** stops everything for the workspace.
+
+## How a task runs (phase 2)
+
+```
+instruction ─► Chief plans (Claude, structured output, uses your memories)
+            ─► each step: specialist agent tool loop through the Tool Gateway
+                 web_search / web_fetch (Claude server tools), browse_page (sandboxed browser),
+                 recall / remember, create_report, prepare_booking_link
+                 tier ≥2 actions → approval request (exact-action hash), never executed directly
+            ─► QA Verifier: automated checks (files exist, CSV rows, duplicates) + independent review
+                 fail → one rework round with the verifier's feedback → else failed
+            ─► completed, or waiting_for_approval if actions were prepared
+            ─► episode memory, agent evaluations (feed clone/suspend/retire)
+```
+
+- **Durability:** status and every finished step are saved in Postgres; a lease + heartbeat
+  marks which worker is busy; crashed work is picked up by another worker without redoing
+  finished steps; retries back off and dead-letter after 5 attempts.
+- **Budgets:** each model call is costed (`llm_calls`); a task stops at its budget
+  (policy default $5) and waits for you to raise it.
+- **Prompt-injection defence:** web content is wrapped as untrusted data; policy is code;
+  agent-written memories are never trusted as instructions.
+- **Refusal fallback:** model calls opt into Anthropic's server-side fallback, so a
+  safety-classifier decline is retried on the recommended fallback model.
 
 ## Agent lifecycle: clone the strong, retire the weak
 
@@ -119,8 +143,9 @@ Re-check each provider's current terms before enabling it.
 
 | Phase | Outcome |
 |---|---|
-| **1. Foundation** ✅ | Schema, auth, task API, workforce + lifecycle, audit, kill switch, web app |
-| 2. First working agent | Temporal worker; Chief plans with Claude; research agent uses web search; report artifact; verifier |
+| **1. Foundation** ✅ | Schema, auth, task API, workforce + lifecycle, audit, kill switch, web app, voice |
+| **1b. Browser & memory** ✅ | Sandboxed browser; workspace + per-agent memory |
+| **2. Agents at work** ✅ | Background workers; Chief plans with Claude; specialists use tools; verifier; files; held approvals |
 | 3. Approvals | Approval centre UI, approval-bound execution, notifications |
 | 4. Reliability | Failure/restart tests, evaluations feeding the lifecycle, cost tracking, staging deploy |
 | 5. Email & calendar | Google OAuth connections |
@@ -131,7 +156,10 @@ Re-check each provider's current terms before enabling it.
 
 ## Review changes from the original blueprint
 
-- **Temporal only** for durable execution (LangGraph dropped; it duplicates checkpointing). Redis deferred.
+- **Durable execution in Postgres** instead of Temporal (and no LangGraph or Redis). Workers claim
+  tasks with leases (`FOR UPDATE SKIP LOCKED`), checkpoint after every step and resume after
+  crashes; that covers the blueprint's reliability requirements with one less service to run.
+  Revisit Temporal if long timers/schedules or very high volume make it worthwhile.
 - Added tables: `policies` (versioned), `tool_definitions`, `task_events`, `llm_calls`,
   `idempotency_key` on `tool_invocations`, full approval binding fields.
 - The backend connects as the table owner, so **RLS doesn't protect API queries**:

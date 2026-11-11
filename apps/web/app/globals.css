@@ -202,3 +202,14 @@ input[type="search"] { margin-bottom: 4px; }
 }
 .memory-body { flex: 1 1 260px; }
 .memory-body p { margin: 0 0 2px; }
+
+/* Task detail */
+.working { display: flex; align-items: center; gap: 8px; color: var(--info); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
+.result { border-left: 3px solid var(--ok); background: var(--bg); padding: 10px 14px; border-radius: 8px; margin: 12px 0; }
+.result.failed, .result.blocked { border-left-color: var(--warn); }
+.preview { white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; max-height: 320px; overflow: auto; margin: 0; }
+.steps { padding-left: 20px; display: grid; gap: 14px; }
+.steps p { margin: 4px 0; }
+.approval { border-color: var(--warn); }
+.warn-text { color: var(--warn); }

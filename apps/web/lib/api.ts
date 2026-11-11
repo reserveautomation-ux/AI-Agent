@@ -70,6 +70,7 @@ export interface Task {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  cost_usd: string;
 }
 
 export interface TaskEvent {
@@ -82,8 +83,70 @@ export interface TaskEvent {
   created_at: string;
 }
 
+export interface TaskStep {
+  sequence: number;
+  title: string | null;
+  status: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  summary: string | null;
+  result: string | null;
+  limitations: string[];
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface Artifact {
+  id: string;
+  name: string;
+  file_type: string;
+  size_bytes: number;
+  preview: string | null;
+  created_at: string;
+}
+
+export interface Approval {
+  id: string;
+  action: string;
+  action_payload: Record<string, unknown>;
+  amount: string | null;
+  currency: string | null;
+  recipient: string | null;
+  risk_tier: number;
+  status: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export interface TaskDetail extends Task {
   events: TaskEvent[];
+  plan: { understanding?: string; assumptions?: string[]; success_criteria?: string[] } | null;
+  verification: {
+    passed?: boolean;
+    score?: number;
+    issues?: string[];
+    criteria?: { criterion: string; met: boolean; note: string }[];
+  } | null;
+  last_error: string | null;
+  steps: TaskStep[];
+  artifacts: Artifact[];
+  approvals: Approval[];
+}
+
+/** Download a file through the authenticated API. */
+export async function downloadArtifact(a: Artifact) {
+  const { data } = await supabase().auth.getSession();
+  const res = await fetch(`${API_URL}/artifacts/${a.id}`, {
+    headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+  });
+  if (!res.ok) throw new ApiError(res.status, "Download failed");
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = a.name;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export interface Me {

@@ -2,29 +2,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from psycopg.types.json import Jsonb
-from workforce_core.db import make_pool
-from workforce_core.tools import TOOLS
+from workforce_core.db import make_pool, sync_tool_definitions
 
 from .config import Settings, get_settings
 from .deps import ConnDep
 from .routes import memory, tasks, workforce, workspace
-
-
-async def sync_tool_definitions(pool) -> None:
-    """Upsert the code-defined tool registry into public.tool_definitions."""
-    async with pool.connection() as conn, conn.transaction():
-        for t in TOOLS:
-            await conn.execute(
-                """insert into public.tool_definitions
-                       (name, category, description, risk_tier, input_schema, enabled)
-                   values (%s, %s, %s, %s, %s, true)
-                   on conflict (name) do update set
-                       category = excluded.category, description = excluded.description,
-                       risk_tier = excluded.risk_tier, input_schema = excluded.input_schema,
-                       updated_at = now()""",
-                (t.name, t.category, t.description, int(t.risk_tier), Jsonb(t.input_schema)),
-            )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -34,7 +16,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         pool = make_pool(settings.database_url)
         await pool.open(wait=True)
-        await sync_tool_definitions(pool)
+        async with pool.connection() as conn:
+            await sync_tool_definitions(conn)
         app.state.pool = pool
         try:
             yield
@@ -57,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(workspace.router)
     app.include_router(tasks.router)
+    app.include_router(tasks.artifacts_router)
     app.include_router(workforce.router)
     app.include_router(memory.router)
     return app
