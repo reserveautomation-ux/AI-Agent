@@ -46,7 +46,7 @@ Defined in `packages/core/src/workforce_core/workforce.py`.
 | Domain core | State machine, policy engine, approvals, tool registry, lifecycle rules | `packages/core` |
 | Database | Postgres + Auth via Supabase; RLS; append-only logs | `supabase/migrations` |
 | Workers | Plan → do → verify pipeline, agent browser, tool gateway, memory | `apps/worker` |
-| Mobile *(phase 2)* | Native app with push notifications for approvals | `apps/mobile` (Expo) |
+| Mobile app | Android + iPhone (Expo): voice, tasks, files, workforce, memory, push alerts | `apps/mobile` |
 
 ## Safety model
 
@@ -149,7 +149,7 @@ Re-check each provider's current terms before enabling it.
 | 3. Approvals | Approval centre UI, approval-bound execution, notifications |
 | 4. Reliability | Failure/restart tests, evaluations feeding the lifecycle, cost tracking, staging deploy |
 | 5. Email & calendar | Google OAuth connections |
-| 6. Mobile app | Expo app (Android + iOS) with push approvals |
+| **6. Mobile app** ✅ | Expo app (Android + iOS): native voice, push notifications, share files |
 | 7. Software factory | Isolated build runners, web deploy, Play/App Store submission |
 | 8. Travel & commerce | Flights via API; rides/food/movies via confirm-in-app links |
 | 9. Finance | Market research and alerts, then broker orders after compliance review |

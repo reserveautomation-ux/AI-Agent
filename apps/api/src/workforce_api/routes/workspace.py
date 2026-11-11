@@ -1,7 +1,7 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from workforce_core.capabilities import CAPABILITIES
 from workforce_core.db import record_audit
 from workforce_core.integrations import PROVIDERS
@@ -105,3 +105,35 @@ async def list_capabilities(user: UserDep) -> list[CapabilityOut]:
         )
         for c in CAPABILITIES
     ]
+
+
+class DeviceIn(BaseModel):
+    token: str = Field(min_length=10, max_length=300)
+    platform: Literal["ios", "android", "web"]
+    device_name: str | None = Field(default=None, max_length=120)
+
+
+class DeviceToken(BaseModel):
+    token: str = Field(min_length=10, max_length=300)
+
+
+@router.post("/devices", status_code=204)
+async def register_device(body: DeviceIn, user: UserDep, conn: ConnDep) -> None:
+    """Register this phone for push notifications (re-registering moves it to you)."""
+    await conn.execute(
+        """insert into public.push_devices (workspace_id, user_id, token, platform, device_name)
+           values (%s, %s, %s, %s, %s)
+           on conflict (token) do update set
+               workspace_id = excluded.workspace_id, user_id = excluded.user_id,
+               platform = excluded.platform, device_name = excluded.device_name,
+               last_seen_at = now(), disabled_at = null""",
+        (user.workspace_id, user.user_id, body.token, body.platform, body.device_name),
+    )
+
+
+@router.post("/devices/unregister", status_code=204)
+async def unregister_device(body: DeviceToken, user: UserDep, conn: ConnDep) -> None:
+    await conn.execute(
+        "update public.push_devices set disabled_at = now() where token = %s and user_id = %s",
+        (body.token, user.user_id),
+    )

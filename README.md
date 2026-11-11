@@ -16,7 +16,8 @@ Voice input uses the browser's built-in speech recognition (Chrome, Edge,
 Safari, Android, iPhone). Firefox doesn't support it yet; typing still works there.
 
 ```
-apps/web        Next.js web app (works on phones; add to home screen)
+apps/mobile     Android + iPhone app (Expo): voice, push notifications, share files
+apps/web        Next.js web app
 apps/api        FastAPI backend
 apps/worker     Background agents: planner, specialists, verifier, browser, tool gateway
 packages/core   Shared domain logic (state machine, policy, approvals, workforce, lifecycle)
@@ -60,7 +61,12 @@ cd apps/worker && uv run python -m workforce_worker
 Run as many workers as you like; each task is handled by one worker at a time
 and resumes elsewhere if a worker stops.
 
-### 4. Web
+### 4. Mobile app
+
+See [apps/mobile/README.md](apps/mobile/README.md): run on your phone with an Expo
+development build, enable push, and publish to Play Store / App Store with EAS.
+
+### 5. Web
 
 ```bash
 cd apps/web

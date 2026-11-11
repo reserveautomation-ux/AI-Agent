@@ -45,3 +45,26 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: https://ci.supabase.co
+      EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder
+      EXPO_PUBLIC_API_URL: https://api.example.com
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx expo lint
+      - run: npx expo-doctor
+      - run: npx expo export --platform android --platform ios --output-dir /tmp/bundle

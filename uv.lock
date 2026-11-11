@@ -1382,6 +1382,7 @@ version = "0.1.0"
 source = { editable = "apps/worker" }
 dependencies = [
     { name = "anthropic" },
+    { name = "httpx" },
     { name = "playwright" },
     { name = "pydantic-settings" },
     { name = "workforce-core" },
@@ -1390,6 +1391,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.80" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "playwright", specifier = ">=1.55" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "workforce-core", editable = "packages/core" },

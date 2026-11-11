@@ -324,3 +324,27 @@ def test_task_detail_retry_and_download(client, make_user, db):
     assert r.status_code == 200 and r.json()["status"] == "planned"  # no steps yet -> re-plan
     assert "Owner's answer: Only Mumbai" in r.json()["objective"]
     assert client.post(f"/tasks/{task['id']}/retry", headers=h).status_code == 409
+
+
+def test_device_registration(client, make_user, db):
+    alice, bob = make_user(), make_user()
+    token = "ExponentPushToken[phone-1234567]"
+    body = {"token": token, "platform": "android", "device_name": "Pixel"}
+    assert client.post("/devices", json=body, headers=auth(alice)).status_code == 204
+    # Same phone signs in as someone else -> it now belongs to them.
+    assert client.post("/devices", json=body, headers=auth(bob)).status_code == 204
+    owner = db.execute(
+        "select user_id::text from push_devices where token = %s", (token,)
+    ).fetchone()[0]
+    assert owner == bob
+    assert (
+        client.post("/devices", json={**body, "platform": "symbian"}, headers=auth(bob)).status_code
+        == 422
+    )
+    assert (
+        client.post("/devices/unregister", json={"token": token}, headers=auth(bob)).status_code
+        == 204
+    )
+    assert db.execute(
+        "select disabled_at is not null from push_devices where token = %s", (token,)
+    ).fetchone()[0]

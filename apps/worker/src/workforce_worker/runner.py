@@ -23,6 +23,7 @@ from workforce_core.db import sync_tool_definitions
 from .agent_loop import AgentError
 from .browser import BrowserService, DomainPolicy
 from .llm import LLM, AnthropicLLM, BudgetExceeded, Refused
+from .notify import ExpoPusher, Pusher, notify_task
 from .pipeline import TaskStopped, advance, load_task, transition
 
 log = logging.getLogger("workforce_worker")
@@ -122,8 +123,27 @@ async def process_one(
     worker_id: str,
     database_url: str,
     browser: BrowserService | None = None,
+    pusher: Pusher | None = None,
 ) -> str | None:
     heartbeat = asyncio.create_task(_heartbeat(database_url, task_id, worker_id))
+    try:
+        return await _process(conn, llm, task_id, attempts, browser)
+    finally:
+        heartbeat.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await heartbeat
+        # Completed, blocked, failed or waiting for approval: tell the owner.
+        with contextlib.suppress(Exception):
+            await notify_task(conn, task_id, pusher)
+
+
+async def _process(
+    conn: AsyncConnection,
+    llm: LLM,
+    task_id: str,
+    attempts: int,
+    browser: BrowserService | None,
+) -> str | None:
     try:
         status = await advance(conn, llm, task_id, browser)
         await release(conn, task_id)
@@ -157,15 +177,15 @@ async def process_one(
             await release(conn, task_id)
         else:
             await release(conn, task_id, delay_s=30 * attempts, error=reason)
-    finally:
-        heartbeat.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await heartbeat
     return None
 
 
 async def worker_loop(
-    settings: WorkerSettings, llm: LLM, browser: BrowserService | None, stop: asyncio.Event
+    settings: WorkerSettings,
+    llm: LLM,
+    browser: BrowserService | None,
+    stop: asyncio.Event,
+    pusher: Pusher | None = None,
 ) -> None:
     worker_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
     async with await AsyncConnection.connect(
@@ -187,6 +207,7 @@ async def worker_loop(
                 worker_id=worker_id,
                 database_url=settings.database_url,
                 browser=browser,
+                pusher=pusher,
             )
             log.info("task %s -> %s", task_id, status)
 
@@ -204,7 +225,10 @@ async def main() -> None:
         await browser.start()
     try:
         await asyncio.gather(
-            *(worker_loop(settings, llm, browser, stop) for _ in range(settings.worker_concurrency))
+            *(
+                worker_loop(settings, llm, browser, stop, ExpoPusher())
+                for _ in range(settings.worker_concurrency)
+            )
         )
     finally:
         if browser:
