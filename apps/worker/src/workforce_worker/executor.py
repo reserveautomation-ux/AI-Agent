@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 from psycopg import AsyncConnection
+from workforce_core.access import blocking_connector, is_read_only, read_only_message
 from workforce_core.connectors import CONNECTORS_BY_KEY, AuthKind, connector_for_tool
 from workforce_core.google import (
     GOOGLE_DOC,
@@ -708,6 +709,15 @@ async def execute_action(
 ) -> str:
     """Run one approved action."""
     integ = integrations or Integrations()
+    blocker = blocking_connector(action)
+    # Checked again here: the owner may have switched it to read-only after approving.
+    if (
+        blocker
+        and conn is not None
+        and workspace_id
+        and await is_read_only(conn, workspace_id, blocker)
+    ):
+        raise ActionFailed(read_only_message(blocker))
     if action in EXECUTORS and conn is not None and workspace_id:
         ctx = ActionContext(key=key or json.dumps(args, sort_keys=True), task_id=task_id)
         return await EXECUTORS[action](conn, workspace_id, args, integ, ctx)

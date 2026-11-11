@@ -227,13 +227,17 @@ class AnthropicChat:
 async def _connections(conn: AsyncConnection, workspace_id: str) -> tuple[str, str]:
     rows = await (
         await conn.execute(
-            "select distinct provider from public.tool_connections"
-            " where workspace_id = %s and connection_status = 'active'",
+            "select provider, bool_and(can_act) as can_act from public.tool_connections"
+            " where workspace_id = %s and connection_status = 'active' group by provider",
             (workspace_id,),
         )
     ).fetchall()
-    have = {r["provider"] for r in rows}
-    connected = [CONNECTORS_BY_KEY[k].name for k in sorted(have) if k in CONNECTORS_BY_KEY]
+    have = {r["provider"]: r["can_act"] for r in rows}
+    connected = [
+        CONNECTORS_BY_KEY[k].name + ("" if have[k] else " (read-only: it can't send or change)")
+        for k in sorted(have)
+        if k in CONNECTORS_BY_KEY
+    ]
     connectable = [
         c.name
         for c in CONNECTORS

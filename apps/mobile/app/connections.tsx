@@ -1,15 +1,31 @@
-import * as Linking from 'expo-linking';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import * as Linking from "expo-linking";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import { useCallback, useMemo, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 
-import { TelegramChat } from '@/components/TelegramChat';
-import { Badge, Button, Card, ErrorText, H, Input, T, styles } from '@/components/ui';
-import { api, post, type Connector, type Me } from '@/lib/api';
-import { confirmAsync } from '@/lib/confirm';
-import { connectorState, joinNames, STATE_BADGE } from '@/lib/labels';
-import { useTheme } from '@/lib/theme';
+import { TelegramChat } from "@/components/TelegramChat";
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorText,
+  H,
+  Input,
+  T,
+  styles,
+} from "@/components/ui";
+import { api, post, type Connector, type Me } from "@/lib/api";
+import { confirmAsync } from "@/lib/confirm";
+import { connectorState, joinNames, STATE_BADGE } from "@/lib/labels";
+import { useTheme } from "@/lib/theme";
 
 function resultText(name: string, outcome: string): string {
   return (
@@ -25,11 +41,14 @@ function resultText(name: string, outcome: string): string {
 export default function ConnectionsScreen() {
   const c = useTheme();
   const { need } = useLocalSearchParams<{ need?: string }>();
-  const needed = useMemo(() => (need ? String(need).split(',').filter(Boolean) : []), [need]);
+  const needed = useMemo(
+    () => (need ? String(need).split(",").filter(Boolean) : []),
+    [need],
+  );
   const [items, setItems] = useState<Connector[] | null>(null);
   const [me, setMe] = useState<Me | null>(null);
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('All');
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("All");
   const [keyFor, setKeyFor] = useState<Connector | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +56,10 @@ export default function ConnectionsScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [list, who] = await Promise.all([api<Connector[]>('/connectors'), api<Me>('/me')]);
+      const [list, who] = await Promise.all([
+        api<Connector[]>("/connectors"),
+        api<Me>("/me"),
+      ]);
       setItems(list);
       setMe(who);
       setError(null);
@@ -52,33 +74,55 @@ export default function ConnectionsScreen() {
     }, [load]),
   );
 
-  const canManage = !me || ['owner', 'admin'].includes(me.workspace.role);
-  const categories = useMemo(() => ['All', ...new Set((items ?? []).map((x) => x.category))], [items]);
+  const canManage = !me || ["owner", "admin"].includes(me.workspace.role);
+  const categories = useMemo(
+    () => ["All", ...new Set((items ?? []).map((x) => x.category))],
+    [items],
+  );
   const q = query.trim().toLowerCase();
   const visible = (items ?? []).filter(
     (x) =>
-      (category === 'All' || x.category === category) &&
-      (!q || `${x.name} ${x.description} ${x.category} ${x.keywords}`.toLowerCase().includes(q)),
+      (category === "All" || x.category === category) &&
+      (!q ||
+        `${x.name} ${x.description} ${x.category} ${x.keywords}`
+          .toLowerCase()
+          .includes(q)),
   );
-  const mine = visible.filter((x) => ['connected', 'expired'].includes(connectorState(x)));
+  const mine = visible.filter((x) =>
+    ["connected", "expired"].includes(connectorState(x)),
+  );
   const rest = visible
     .filter((x) => !mine.includes(x))
-    .sort((a, b) => Number(needed.includes(b.key)) - Number(needed.includes(a.key)));
-  const stillNeeded = (items ?? []).filter((x) => needed.includes(x.key) && connectorState(x) !== 'connected');
+    .sort(
+      (a, b) => Number(needed.includes(b.key)) - Number(needed.includes(a.key)),
+    );
+  const stillNeeded = (items ?? []).filter(
+    (x) => needed.includes(x.key) && connectorState(x) !== "connected",
+  );
 
   const signIn = async (x: Connector) => {
     setBusy(x.key);
     setError(null);
     setNotice(null);
     try {
-      const returnUrl = Linking.createURL('connections');
-      const { auth_url } = await post<{ auth_url: string }>(`/connections/${x.key}/start`, {
-        redirect_to: returnUrl,
-      });
+      const returnUrl = Linking.createURL("connections");
+      const { auth_url } = await post<{ auth_url: string }>(
+        `/connections/${x.key}/start`,
+        {
+          redirect_to: returnUrl,
+        },
+      );
       const result = await WebBrowser.openAuthSessionAsync(auth_url, returnUrl);
-      if (result.type === 'success') {
+      if (result.type === "success") {
         const { queryParams } = Linking.parse(result.url);
-        setNotice(resultText(x.name, queryParams?.connected ? 'connected' : String(queryParams?.status ?? 'error')));
+        setNotice(
+          resultText(
+            x.name,
+            queryParams?.connected
+              ? "connected"
+              : String(queryParams?.status ?? "error"),
+          ),
+        );
       }
       await load();
     } catch (e) {
@@ -92,7 +136,7 @@ export default function ConnectionsScreen() {
     const ok = await confirmAsync(
       `Disconnect ${name ?? x.name}?`,
       "Agents won't be able to use it until you reconnect.",
-      'Disconnect',
+      "Disconnect",
       true,
     );
     if (!ok) return;
@@ -107,18 +151,40 @@ export default function ConnectionsScreen() {
     }
   };
 
+  const setAccess = async (x: Connector, id: string, canAct: boolean) => {
+    setBusy(x.key);
+    try {
+      await post(`/connections/${id}/access`, { can_act: canAct });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const card = (x: Connector) => {
     const state = connectorState(x);
     const [label, tone] = STATE_BADGE[state];
-    const connectable = x.live && x.available && (x.auth === 'oauth2' || x.auth === 'api_key');
+    const connectable =
+      x.live && x.available && (x.auth === "oauth2" || x.auth === "api_key");
     return (
-      <Card key={x.key} style={needed.includes(x.key) && state !== 'connected' ? { borderColor: c.warn, borderWidth: 2 } : undefined}>
+      <Card
+        key={x.key}
+        style={
+          needed.includes(x.key) && state !== "connected"
+            ? { borderColor: c.warn, borderWidth: 2 }
+            : undefined
+        }
+      >
         <View style={styles.between}>
           <T bold style={{ flex: 1 }}>
             {x.icon} {x.name}
           </T>
           <View style={styles.row}>
-            {x.plan !== 'free' && <Badge label={x.plan === 'pro' ? 'Pro' : x.plan} tone={c.info} />}
+            {x.plan !== "free" && (
+              <Badge label={x.plan === "pro" ? "Pro" : x.plan} tone={c.info} />
+            )}
             <Badge label={label} tone={c[tone]} />
           </View>
         </View>
@@ -134,38 +200,76 @@ export default function ConnectionsScreen() {
           <View key={a.id} style={[styles.between, { marginTop: 10 }]}>
             <View style={{ flex: 1 }}>
               <T small bold>
-                {a.status === 'active' ? '🟢' : '🟠'} {a.display_name}
+                {a.status === "active" ? "🟢" : "🟠"} {a.display_name}
               </T>
-              {a.status !== 'active' && <T small color={c.warn}>Access expired. Please reconnect.</T>}
+              {a.status !== "active" && (
+                <T small color={c.warn}>
+                  Access expired. Please reconnect.
+                </T>
+              )}
+              {x.read_only_option && a.status === "active" && (
+                <View style={[styles.row, { marginTop: 6, gap: 6 }]}>
+                  {[
+                    { can: false, label: "👀 Read only" },
+                    { can: true, label: "✋ Can act" },
+                  ].map((o) => (
+                    <Button
+                      key={o.label}
+                      title={o.label}
+                      small
+                      variant={a.can_act === o.can ? "primary" : "ghost"}
+                      onPress={() => setAccess(x, a.id, o.can)}
+                      disabled={!!busy || !canManage}
+                    />
+                  ))}
+                </View>
+              )}
             </View>
             {canManage && (
-              <Button title="Disconnect" small variant="ghost" onPress={() => disconnect(x, a.id, a.display_name)} disabled={!!busy} />
+              <Button
+                title="Disconnect"
+                small
+                variant="ghost"
+                onPress={() => disconnect(x, a.id, a.display_name)}
+                disabled={!!busy}
+              />
             )}
           </View>
         ))}
-        {state === 'unavailable' && (
+        {state === "unavailable" && (
           <T small muted style={{ marginTop: 8 }}>
             The server admin needs to switch this on first.
           </T>
         )}
-        {x.key === 'telegram' && state === 'connected' && <TelegramChat />}
-        {x.auth === 'deep_link' && !!x.open_url && (
+        {x.key === "telegram" && state === "connected" && <TelegramChat />}
+        {x.auth === "deep_link" && !!x.open_url && (
           <View style={{ marginTop: 10 }}>
-            <Button title={`Open ${x.name}`} small variant="ghost" onPress={() => Linking.openURL(x.open_url)} />
+            <Button
+              title={`Open ${x.name}`}
+              small
+              variant="ghost"
+              onPress={() => Linking.openURL(x.open_url)}
+            />
           </View>
         )}
         {connectable && canManage && (
           <View style={{ marginTop: 12 }}>
             <Button
-              title={state === 'connected' ? 'Add another account' : state === 'expired' ? 'Reconnect' : `Connect ${x.name}`}
-              variant={state === 'connected' ? 'ghost' : 'primary'}
+              title={
+                state === "connected"
+                  ? "Add another account"
+                  : state === "expired"
+                    ? "Reconnect"
+                    : `Connect ${x.name}`
+              }
+              variant={state === "connected" ? "ghost" : "primary"}
               loading={busy === x.key}
               disabled={!!busy}
-              onPress={() => (x.auth === 'oauth2' ? signIn(x) : setKeyFor(x))}
+              onPress={() => (x.auth === "oauth2" ? signIn(x) : setKeyFor(x))}
             />
           </View>
         )}
-        {connectable && !canManage && state !== 'connected' && (
+        {connectable && !canManage && state !== "connected" && (
           <T small muted style={{ marginTop: 8 }}>
             Ask the workspace owner to connect this.
           </T>
@@ -176,10 +280,15 @@ export default function ConnectionsScreen() {
 
   return (
     <>
-      <ScrollView style={{ backgroundColor: c.bg }} contentContainerStyle={styles.screen} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={{ backgroundColor: c.bg }}
+        contentContainerStyle={styles.screen}
+        keyboardShouldPersistTaps="handled"
+      >
         <T muted small>
-          Connect a service only when you need it. If a task needs one, it waits and carries on by itself once you
-          connect. Sign-ins and keys are stored encrypted and never shown again.
+          Connect a service only when you need it. If a task needs one, it waits
+          and carries on by itself once you connect. Sign-ins and keys are
+          stored encrypted and never shown again.
         </T>
         {notice && (
           <Card style={{ marginTop: 12 }}>
@@ -188,8 +297,12 @@ export default function ConnectionsScreen() {
         )}
         {stillNeeded.length > 0 && (
           <Card style={{ borderColor: c.warn, marginTop: 12 }}>
-            <T bold>A task is waiting for {joinNames(stillNeeded.map((x) => x.name))}</T>
-            <T small muted>Connect it below and the task continues by itself.</T>
+            <T bold>
+              A task is waiting for {joinNames(stillNeeded.map((x) => x.name))}
+            </T>
+            <T small muted>
+              Connect it below and the task continues by itself.
+            </T>
           </Card>
         )}
         <View style={{ height: 12 }} />
@@ -200,7 +313,12 @@ export default function ConnectionsScreen() {
           autoCapitalize="none"
           accessibilityLabel="Search services"
         />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 6 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginTop: 10 }}
+          contentContainerStyle={{ gap: 6 }}
+        >
           {categories.map((cat) => (
             <Pressable
               key={cat}
@@ -213,8 +331,9 @@ export default function ConnectionsScreen() {
                 borderRadius: 999,
                 borderWidth: 1,
                 borderColor: category === cat ? c.text : c.border,
-                backgroundColor: category === cat ? c.text : 'transparent',
-              }}>
+                backgroundColor: category === cat ? c.text : "transparent",
+              }}
+            >
               <T small color={category === cat ? c.bg : c.muted}>
                 {cat}
               </T>
@@ -235,8 +354,12 @@ export default function ConnectionsScreen() {
                 {mine.map(card)}
               </>
             )}
-            <H>{mine.length ? 'More services' : 'Services'}</H>
-            {rest.length === 0 ? <T muted>Nothing matches “{query}”.</T> : rest.map(card)}
+            <H>{mine.length ? "More services" : "Services"}</H>
+            {rest.length === 0 ? (
+              <T muted>Nothing matches “{query}”.</T>
+            ) : (
+              rest.map(card)
+            )}
           </>
         )}
       </ScrollView>
@@ -245,7 +368,7 @@ export default function ConnectionsScreen() {
         onClose={() => setKeyFor(null)}
         onSaved={async (name) => {
           setKeyFor(null);
-          setNotice(resultText(name, 'connected'));
+          setNotice(resultText(name, "connected"));
           await load();
         }}
       />
@@ -289,13 +412,34 @@ function KeyForm({
     }
   };
 
-  const complete = connector?.fields.every((f) => (values[f.key] ?? '').trim()) ?? false;
+  const complete =
+    connector?.fields.every((f) => (values[f.key] ?? "").trim()) ?? false;
 
   return (
-    <Modal visible={!!connector} transparent animationType="slide" onRequestClose={close}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' }} onPress={close} accessibilityLabel="Close" />
-        <View style={{ backgroundColor: c.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20, maxHeight: '85%' }}>
+    <Modal
+      visible={!!connector}
+      transparent
+      animationType="slide"
+      onRequestClose={close}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)" }}
+          onPress={close}
+          accessibilityLabel="Close"
+        />
+        <View
+          style={{
+            backgroundColor: c.surface,
+            borderTopLeftRadius: 18,
+            borderTopRightRadius: 18,
+            padding: 20,
+            maxHeight: "85%",
+          }}
+        >
           <ScrollView keyboardShouldPersistTaps="handled">
             <T bold size={17}>
               {connector?.icon} Connect {connector?.name}
@@ -311,7 +455,7 @@ function KeyForm({
                   {f.label}
                 </T>
                 <Input
-                  value={values[f.key] ?? ''}
+                  value={values[f.key] ?? ""}
                   onChangeText={(t) => setValues((v) => ({ ...v, [f.key]: t }))}
                   placeholder={f.placeholder}
                   secureTextEntry={f.secret}
@@ -327,13 +471,24 @@ function KeyForm({
               </View>
             ))}
             <T small muted style={{ marginTop: 12 }}>
-              We check it with {connector?.name}, then store it encrypted. It is never shown again.
+              We check it with {connector?.name}, then store it encrypted. It is
+              never shown again.
             </T>
             <ErrorText>{error}</ErrorText>
             <View style={{ height: 12 }} />
-            <Button title="Save and connect" onPress={save} loading={busy} disabled={!complete} />
+            <Button
+              title="Save and connect"
+              onPress={save}
+              loading={busy}
+              disabled={!complete}
+            />
             <View style={{ height: 8 }} />
-            <Button title="Cancel" variant="ghost" onPress={close} disabled={busy} />
+            <Button
+              title="Cancel"
+              variant="ghost"
+              onPress={close}
+              disabled={busy}
+            />
           </ScrollView>
         </View>
       </KeyboardAvoidingView>

@@ -314,3 +314,41 @@ def test_connect_with_key_checks_it_and_wakes_waiting_tasks(gclient, make_user, 
     assert (
         gclient.post("/connections/notion/key", json={"fields": {}}, headers=h).status_code == 409
     )
+
+
+def test_read_only_switch(gclient, make_user, db):
+    client = gclient
+    h = auth(make_user())
+    ws = client.get("/me", headers=h).json()["workspace"]["id"]
+    rows = {}
+    for provider in ("google_calendar", "slack"):
+        rows[provider] = db.execute(
+            "insert into tool_connections (workspace_id, provider, account_ref, display_name)"
+            " values (%s, %s, %s, %s) returning id::text",
+            (ws, provider, f"acct-{provider}", provider),
+        ).fetchone()[0]
+    catalog = {c["key"]: c for c in client.get("/connectors", headers=h).json()}
+    assert catalog["google_calendar"]["read_only_option"] is True
+    assert catalog["slack"]["read_only_option"] is False
+    assert catalog["google_calendar"]["accounts"][0]["can_act"] is True
+
+    r = client.post(
+        f"/connections/{rows['google_calendar']}/access", json={"can_act": False}, headers=h
+    )
+    assert r.status_code == 200 and r.json()["can_act"] is False
+    catalog = {c["key"]: c for c in client.get("/connectors", headers=h).json()}
+    assert catalog["google_calendar"]["accounts"][0]["can_act"] is False
+    # Post-only services can't be read-only; someone else's connection isn't found.
+    assert (
+        client.post(
+            f"/connections/{rows['slack']}/access", json={"can_act": False}, headers=h
+        ).status_code
+        == 422
+    )
+    other = auth(make_user())
+    assert (
+        client.post(
+            f"/connections/{rows['google_calendar']}/access", json={"can_act": True}, headers=other
+        ).status_code
+        == 404
+    )

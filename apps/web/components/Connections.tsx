@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import { TelegramChat } from "@/components/TelegramChat";
 import {
   api,
@@ -34,8 +40,12 @@ export function Connections() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    api<Connector[]>("/connectors").then(setItems).catch((e) => setError(e.message));
-    api<Me>("/me").then(setMe).catch(() => {});
+    api<Connector[]>("/connectors")
+      .then(setItems)
+      .catch((e) => setError(e.message));
+    api<Me>("/me")
+      .then(setMe)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -46,34 +56,51 @@ export function Connections() {
     if (need) setNeeded(need.split(",").filter(Boolean));
     const service = q.get("connected") ?? q.get("connect");
     if (service) {
-      setNotice(`${service}|${q.get("connected") ? "connected" : (q.get("status") ?? "error")}`);
+      setNotice(
+        `${service}|${q.get("connected") ? "connected" : (q.get("status") ?? "error")}`,
+      );
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, [load]);
 
-  const byKey = useMemo(() => new Map((items ?? []).map((c) => [c.key, c])), [items]);
+  const byKey = useMemo(
+    () => new Map((items ?? []).map((c) => [c.key, c])),
+    [items],
+  );
   const categories = useMemo(
     () => ["All", ...new Set((items ?? []).map((c) => c.category))],
     [items],
   );
   const noticeText = notice
-    ? resultText(byKey.get(notice.split("|")[0])?.name ?? "The service", notice.split("|")[1])
+    ? resultText(
+        byKey.get(notice.split("|")[0])?.name ?? "The service",
+        notice.split("|")[1],
+      )
     : null;
 
   const q = query.trim().toLowerCase();
   const visible = (items ?? []).filter(
     (c) =>
       (category === "All" || c.category === category) &&
-      (!q || `${c.name} ${c.description} ${c.category} ${c.keywords}`.toLowerCase().includes(q)),
+      (!q ||
+        `${c.name} ${c.description} ${c.category} ${c.keywords}`
+          .toLowerCase()
+          .includes(q)),
   );
-  const connected = visible.filter((c) => ["connected", "expired"].includes(connectorState(c)));
+  const connected = visible.filter((c) =>
+    ["connected", "expired"].includes(connectorState(c)),
+  );
   const rest = visible.filter((c) => !connected.includes(c));
-  const stillNeeded = needed.filter((k) => connectorState(byKey.get(k) ?? ({} as Connector)) !== "connected");
+  const stillNeeded = needed.filter(
+    (k) => connectorState(byKey.get(k) ?? ({} as Connector)) !== "connected",
+  );
   const canManage = !me || ["owner", "admin"].includes(me.workspace.role);
 
   const setTimezone = async (zone: string) => {
     try {
-      const ws = await post<Me["workspace"]>("/workspace/timezone", { timezone: zone });
+      const ws = await post<Me["workspace"]>("/workspace/timezone", {
+        timezone: zone,
+      });
       if (me) setMe({ ...me, workspace: ws });
     } catch (e) {
       setError((e as Error).message);
@@ -86,7 +113,8 @@ export function Connections() {
       {items && stillNeeded.length > 0 && (
         <div className="card approval">
           <strong>
-            A task is waiting for {joinNames(stillNeeded.map((k) => byKey.get(k)?.name ?? k))}.
+            A task is waiting for{" "}
+            {joinNames(stillNeeded.map((k) => byKey.get(k)?.name ?? k))}.
           </strong>{" "}
           Connect it below and the task continues by itself.
         </div>
@@ -110,7 +138,9 @@ export function Connections() {
               disabled={!canManage}
             >
               {!TIMEZONES.some((z) => z.zone === me.workspace.timezone) && (
-                <option value={me.workspace.timezone}>{me.workspace.timezone}</option>
+                <option value={me.workspace.timezone}>
+                  {me.workspace.timezone}
+                </option>
               )}
               {TIMEZONES.map((z) => (
                 <option key={z.zone} value={z.zone}>
@@ -145,7 +175,13 @@ export function Connections() {
               <h2>Your connections</h2>
               <div className="grid">
                 {connected.map((c) => (
-                  <ConnectorCard key={c.key} c={c} highlight={needed.includes(c.key)} canManage={canManage} onChange={load} />
+                  <ConnectorCard
+                    key={c.key}
+                    c={c}
+                    highlight={needed.includes(c.key)}
+                    canManage={canManage}
+                    onChange={load}
+                  />
                 ))}
               </div>
             </>
@@ -156,9 +192,19 @@ export function Connections() {
           ) : (
             <div className="grid">
               {[...rest]
-                .sort((a, b) => Number(needed.includes(b.key)) - Number(needed.includes(a.key)))
+                .sort(
+                  (a, b) =>
+                    Number(needed.includes(b.key)) -
+                    Number(needed.includes(a.key)),
+                )
                 .map((c) => (
-                  <ConnectorCard key={c.key} c={c} highlight={needed.includes(c.key)} canManage={canManage} onChange={load} />
+                  <ConnectorCard
+                    key={c.key}
+                    c={c}
+                    highlight={needed.includes(c.key)}
+                    canManage={canManage}
+                    onChange={load}
+                  />
                 ))}
             </div>
           )}
@@ -190,9 +236,12 @@ function ConnectorCard({
     setBusy(true);
     setError(null);
     try {
-      const { auth_url } = await post<{ auth_url: string }>(`/connections/${c.key}/start`, {
-        redirect_to: `${window.location.origin}/connections`,
-      });
+      const { auth_url } = await post<{ auth_url: string }>(
+        `/connections/${c.key}/start`,
+        {
+          redirect_to: `${window.location.origin}/connections`,
+        },
+      );
       window.location.href = auth_url; // the provider's own sign-in page
     } catch (e) {
       setError((e as Error).message);
@@ -217,7 +266,12 @@ function ConnectorCard({
   };
 
   const disconnect = async (id: string, name: string | null) => {
-    if (!confirm(`Disconnect ${name ?? c.name}? Agents won't be able to use it until you reconnect.`)) return;
+    if (
+      !confirm(
+        `Disconnect ${name ?? c.name}? Agents won't be able to use it until you reconnect.`,
+      )
+    )
+      return;
     setBusy(true);
     try {
       await post(`/connections/${id}/disconnect`);
@@ -229,18 +283,43 @@ function ConnectorCard({
     }
   };
 
-  const connectable = c.live && c.available && (c.auth === "oauth2" || c.auth === "api_key");
+  const setAccess = async (id: string, canAct: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await post(`/connections/${id}/access`, { can_act: canAct });
+      onChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const connectable =
+    c.live && c.available && (c.auth === "oauth2" || c.auth === "api_key");
   const connectLabel =
-    state === "connected" ? "Add another account" : state === "expired" ? `Reconnect ${c.name}` : `Connect ${c.name}`;
+    state === "connected"
+      ? "Add another account"
+      : state === "expired"
+        ? `Reconnect ${c.name}`
+        : `Connect ${c.name}`;
 
   return (
-    <div className={`agent conn ${highlight ? "conn-needed" : ""}`} id={`svc-${c.key}`}>
+    <div
+      className={`agent conn ${highlight ? "conn-needed" : ""}`}
+      id={`svc-${c.key}`}
+    >
       <div className="row">
         <strong>
           <span aria-hidden>{c.icon}</span> {c.name}
         </strong>
         <span className="actions">
-          {c.plan !== "free" && <span className="badge info">{c.plan === "pro" ? "Pro" : c.plan}</span>}
+          {c.plan !== "free" && (
+            <span className="badge info">
+              {c.plan === "pro" ? "Pro" : c.plan}
+            </span>
+          )}
           <span className={`badge ${tone}`}>{label}</span>
         </span>
       </div>
@@ -251,11 +330,46 @@ function ConnectorCard({
         <p key={a.id} className="small" style={{ margin: "4px 0" }}>
           {a.status === "active" ? "🟢" : "🟠"} {a.display_name}
           {a.status !== "active" && " — access expired, please reconnect"}
-          {a.last_used_at && <span className="muted"> · last used {new Date(a.last_used_at).toLocaleDateString()}</span>}{" "}
+          {a.last_used_at && (
+            <span className="muted">
+              {" "}
+              · last used {new Date(a.last_used_at).toLocaleDateString()}
+            </span>
+          )}{" "}
           {canManage && (
-            <button className="ghost small" onClick={() => disconnect(a.id, a.display_name)} disabled={busy}>
+            <button
+              className="ghost small"
+              onClick={() => disconnect(a.id, a.display_name)}
+              disabled={busy}
+            >
               Disconnect
             </button>
+          )}
+          {c.read_only_option && a.status === "active" && (
+            <span
+              className="access-pick"
+              role="group"
+              aria-label={`What agents may do with ${c.name}`}
+            >
+              <button
+                className={`suggest-chip ${a.can_act ? "" : "on"}`}
+                aria-pressed={!a.can_act}
+                disabled={busy || !canManage}
+                onClick={() => setAccess(a.id, false)}
+                title="Agents can read, but never send or change anything"
+              >
+                👀 Read only
+              </button>
+              <button
+                className={`suggest-chip ${a.can_act ? "on" : ""}`}
+                aria-pressed={a.can_act}
+                disabled={busy || !canManage}
+                onClick={() => setAccess(a.id, true)}
+                title="Agents can also act, always with your approval"
+              >
+                ✋ Can act
+              </button>
+            </span>
           )}
         </p>
       ))}
@@ -269,7 +383,10 @@ function ConnectorCard({
         </p>
       )}
       {state === "unavailable" && (
-        <p className="muted small">The server admin needs to switch this on first (see the deployment guide).</p>
+        <p className="muted small">
+          The server admin needs to switch this on first (see the deployment
+          guide).
+        </p>
       )}
 
       {connectable && canManage && !open && (
@@ -299,20 +416,28 @@ function ConnectorCard({
                 spellCheck={false}
                 placeholder={f.placeholder}
                 value={values[f.key] ?? ""}
-                onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, [f.key]: e.target.value }))
+                }
                 required
               />
               {f.help && <span className="muted"> {f.help}</span>}
             </label>
           ))}
           <p className="muted small">
-            We check it with {c.name}, then store it encrypted. It is never shown again.
+            We check it with {c.name}, then store it encrypted. It is never
+            shown again.
           </p>
           <div className="actions">
             <button type="submit" disabled={busy}>
               {busy ? "Checking…" : "Save and connect"}
             </button>
-            <button type="button" className="ghost" onClick={() => setOpen(false)} disabled={busy}>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setOpen(false)}
+              disabled={busy}
+            >
               Cancel
             </button>
           </div>

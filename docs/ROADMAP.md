@@ -8,7 +8,9 @@ Prices change; check each provider before switching something on.
 
 | Hands | What it does | Cost |
 |---|---|---|
-| Chat assistant (web + phone) | Typing, dictation, hands-free voice conversation, its own name, memory, private chats | Claude usage (capped per day) |
+| Chat assistant (web + phone) | Typing, dictation, hands-free voice conversation, its own name and personality (Friendly, Professional, Hinglish, Playful; short or detailed), memory, private chats | Claude usage (capped per day) |
+| Morning briefing | One tap: every day at your time, calendar, important mail, weather, news and reminders in its own chat | Claude usage (small) |
+| UPI payments | "Pay Ramesh ₹500 for milk": GPay, PhonePe, Paytm or BHIM opens filled in; you enter your PIN | Free |
 | Voice | Device voices, or a natural voice built into the web app (one-time ~90 MB download) | Free |
 | Photos & PDFs | Send a bill, form or screenshot and the assistant reads it | Claude usage |
 | Workforce tasks | Chief plans, specialist agents work, a verifier checks, you approve | Claude usage |
@@ -27,30 +29,29 @@ Prices change; check each provider before switching something on.
 | GitHub + Vercel | Build a website and publish it at a `*.vercel.app` address | Free tier |
 | Pictures | Posters and illustrations (your own Cloudflare account, ~230 a day free); logos, icons and diagrams as SVG | Free tier / Free |
 | Cabs, food, shopping, tickets | Agents find options and prepare the link; you confirm and pay in the app | Free |
-| Safety | Approvals for anything sent, booked or paid; emergency stop; audit log; encrypted keys | Free |
+| Safety | Approvals for anything sent, booked or paid; read-only or can-act switch per connection (Gmail, Calendar); emergency stop; audit log; encrypted keys | Free |
 
 ## Suggested next: free or nearly free
 
 | # | Add | Why it helps | Cost | Effort |
 |---|---|---|---|---|
-| 1 | **Morning briefing** (preset repeating job) | Each morning: today's calendar, important mail, weather, top news, reminders. In chat, Telegram or push | Free | Small |
-| 2 | **Watch & alert** (price, page, stock, train seats) | "Tell me when this phone drops below ₹20,000." The tool exists but isn't switched on yet | Free | Small |
-| 3 | **Weather, maps & directions** (Open-Meteo, OpenStreetMap) | Plans trips and commutes without paid map keys | Free | Small |
-| 4 | **Expenses from receipts** | Photo or Gmail receipt → a row in your Google Sheet, with a monthly summary | Free | Small |
-| 5 | **Google Contacts** | "Email Rahul" finds the right Rahul; birthdays become reminders | Free | Small |
-| 6 | **WhatsApp incoming messages** | Alerts when someone important messages your business number; replies drafted for approval | Free tier | Medium |
-| 7 | **Outlook / Microsoft 365** mail and calendar | Same as Gmail for people on Outlook | Free | Medium |
-| 8 | **Notion** pages and databases | Save notes, plans and research where you already work | Free | Small |
-| 9 | **Netlify / Cloudflare Pages** deploy | More free website hosts, custom domains | Free tier | Small |
-| 10 | **Android app builds** (Expo EAS) | "Make me an app": an installable Android build | Free tier + Play Console ($25 once) | Medium |
-| 11 | **Supabase backend for built apps** | Apps the workforce builds get a real database and login | Free tier | Medium |
-| 12 | **Short videos** from pictures + natural voiceover (FFmpeg) | Reels, ads and explainers without paid video AI | Free | Medium |
-| 13 | **Natural voice on the phone** (on-device Kokoro) | The same human-like voice on the phone app (332 MB download per language, iOS 17+) | Free | Medium (needs real-phone testing) |
-| 14 | **Better speech-to-text on the phone** (on-device Whisper) | More accurate voice input in Indian accents and Hinglish | Free | Medium |
-| 15 | **Email newsletters / bulk email** (Brevo) | Send approved campaigns to your list | Free tier (300 a day) | Small |
-| 16 | **Payment links** (Razorpay) | Agents prepare a payment link or invoice for you to approve and send | Per use (fee per payment) | Small |
-| 17 | **Smart home** (Home Assistant) | "Turn off the AC at 11", "is the door locked?" | Free | Small |
-| 18 | **Team / family workspace** | Invite people; shared tasks; one assistant each | Free | Medium |
+| 1 | **Watch & alert** (price, page, stock, train seats) | "Tell me when this phone drops below ₹20,000." The tool exists but isn't switched on yet | Free | Small |
+| 2 | **Weather, maps & directions** (Open-Meteo, OpenStreetMap) | Plans trips and commutes without paid map keys | Free | Small |
+| 3 | **Expenses from receipts** | Photo or Gmail receipt → a row in your Google Sheet, with a monthly summary | Free | Small |
+| 4 | **Google Contacts** | "Email Rahul" finds the right Rahul; birthdays become reminders | Free | Small |
+| 5 | **WhatsApp incoming messages** | Alerts when someone important messages your business number; replies drafted for approval | Free tier | Medium |
+| 6 | **Outlook / Microsoft 365** mail and calendar | Same as Gmail for people on Outlook | Free | Medium |
+| 7 | **Notion** pages and databases | Save notes, plans and research where you already work | Free | Small |
+| 8 | **Netlify / Cloudflare Pages** deploy | More free website hosts, custom domains | Free tier | Small |
+| 9 | **Android app builds** (Expo EAS) | "Make me an app": an installable Android build | Free tier + Play Console ($25 once) | Medium |
+| 10 | **Supabase backend for built apps** | Apps the workforce builds get a real database and login | Free tier | Medium |
+| 11 | **Short videos** from pictures + natural voiceover (FFmpeg) | Reels, ads and explainers without paid video AI | Free | Medium |
+| 12 | **Natural voice on the phone** (on-device Kokoro) | The same human-like voice on the phone app (332 MB download per language, iOS 17+) | Free | Medium (needs real-phone testing) |
+| 13 | **Better speech-to-text on the phone** (on-device Whisper) | More accurate voice input in Indian accents and Hinglish | Free | Medium |
+| 14 | **Email newsletters / bulk email** (Brevo) | Send approved campaigns to your list | Free tier (300 a day) | Small |
+| 15 | **Payment links** (Razorpay) | Agents prepare a payment link or invoice for you to approve and send | Per use (fee per payment) | Small |
+| 16 | **Smart home** (Home Assistant) | "Turn off the AC at 11", "is the door locked?" | Free | Small |
+| 17 | **Team / family workspace** | Invite people; shared tasks; one assistant each | Free | Medium |
 
 ## Bigger or paid (when you're ready)
 
@@ -72,8 +73,8 @@ Prices change; check each provider before switching something on.
 |---|---|---|---|
 | Runs long tasks in the background with sub-agents | ✅ Chief + specialist agents, background worker | — | — |
 | Asks before sending or buying | ✅ Approvals, Face ID for money, emergency stop | — | — |
-| Name, avatar and communication style | 🟡 Name and voice | **Avatar picture and personality** (friendly / formal / Hinglish, short or detailed) | Free |
-| Read-only vs full-action access per app ("Sentinel") | 🟡 Per-service connections | **A read-only / can-act switch on every connection** | Free |
+| Name, avatar and communication style | ✅ Name, voice and personality | **Avatar picture** | Free |
+| Read-only vs full-action access per app ("Sentinel") | ✅ Read-only / can-act switch on connections that can read | — | — |
 | Goals view and project side-chats | 🟡 Tasks and chats | **Goals** ("find a 2BHK in Pune under ₹25k", "save ₹50k by March") with a plan, progress and check-ins; **Projects** grouping chats, files and tasks | Free |
 | Watch the agent's browser live | 🟡 Sandboxed browser, results only | **Live view** of what the agent is doing, with a Stop button | Free |
 | Artifacts: documents, trackers, dashboards, web pages | 🟡 Files, Docs, Sheets, websites | **Live trackers and dashboards** (expenses, job applications, habits) that update themselves | Free |
@@ -102,8 +103,6 @@ Lessons from Muse's problems:
 - **Data controls**: export everything, delete everything, and see what it remembers. Free.
 
 **India-first**
-- **UPI payment links**: "Pay ₹500 to Ramesh". Opens GPay, PhonePe or Paytm with the
-  amount filled in; you confirm. Free; works like the WhatsApp links.
 - **Bills and renewals**: due dates read from email and SMS, with reminders before late
   fees (insurance, rent, EMIs). Free.
 - **Grocery and pharmacy lists**: list → Blinkit, Zepto, BigBasket or 1mg, ready to order. Free.

@@ -18,6 +18,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
+from workforce_core.access import read_only_option
 from workforce_core.connectors import CONNECTORS, CONNECTORS_BY_KEY, AuthKind, Connector
 from workforce_core.db import record_audit
 from workforce_core.google import new_pkce
@@ -43,6 +44,7 @@ class AccountOut(BaseModel):
     created_at: datetime
     last_used_at: datetime | None
     last_error: str | None
+    can_act: bool = True
 
 
 class ProviderOut(BaseModel):
@@ -51,6 +53,7 @@ class ProviderOut(BaseModel):
     description: str
     configured: bool
     accounts: list[AccountOut]
+    read_only_option: bool = False
 
 
 class FieldOut(BaseModel):
@@ -77,6 +80,7 @@ class ConnectorOut(BaseModel):
     keywords: str
     fields: list[FieldOut]
     accounts: list[AccountOut]
+    read_only_option: bool = False  # can be connected read-only (it has read and act tools)
 
 
 class StartRequest(BaseModel):
@@ -141,7 +145,7 @@ async def _accounts(conn, workspace_id: str) -> dict[str, list[AccountOut]]:
     rows = await (
         await conn.execute(
             """select id::text, provider, display_name, connection_status as status, scopes,
-                      created_at, last_used_at, last_error
+                      created_at, last_used_at, last_error, can_act
                from public.tool_connections
                where workspace_id = %s and connection_status <> 'revoked'
                order by created_at""",
@@ -245,6 +249,7 @@ async def catalog(user: UserDep, conn: ConnDep, settings: SettingsDep) -> list[C
             keywords=c.keywords,
             fields=[FieldOut(**f.__dict__) for f in c.fields],
             accounts=accounts.get(c.key, []),
+            read_only_option=read_only_option(c.key),
         )
         for c in CONNECTORS
     ]
@@ -263,6 +268,7 @@ async def list_connections(
             description=c.description,
             configured=_available(c, settings),
             accounts=accounts.get(c.key, []),
+            read_only_option=read_only_option(c.key),
         )
         for c in CONNECTORS
         if c.auth in CONNECTABLE and c.live
@@ -420,6 +426,52 @@ async def connect_with_key(
         secret=fields,
     )
     return {"id": connection_id, "display_name": display}
+
+
+# --- read-only or can act --------------------------------------------------------------
+
+
+class AccessIn(BaseModel):
+    can_act: bool
+
+
+@router.post("/{connection_id}/access", response_model=AccountOut)
+async def set_access(connection_id: str, body: AccessIn, user: AdminDep, conn: ConnDep):
+    """Read-only: the workforce can read this account but never send, create or change
+    anything with it. Takes effect at once, including for actions already approved."""
+    try:
+        uuid.UUID(connection_id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "connection not found") from exc
+    async with conn.transaction():
+        row = await (
+            await conn.execute(
+                "update public.tool_connections set can_act = %s, updated_at = now()"
+                " where id = %s and workspace_id = %s and connection_status <> 'revoked'"
+                " returning id::text, provider, display_name, connection_status as status,"
+                " scopes, created_at, last_used_at, last_error, can_act",
+                (body.can_act, connection_id, user.workspace_id),
+            )
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "connection not found")
+        if not body.can_act and not read_only_option(row["provider"]):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "this service only acts; disconnect it instead",
+            )
+        await record_audit(
+            conn,
+            workspace_id=user.workspace_id,
+            actor_type="user",
+            actor_id=user.user_id,
+            action="connection.access_changed",
+            target_type="connection",
+            target_id=row["id"],
+            event={"provider": row["provider"], "can_act": body.can_act},
+        )
+    row.pop("provider")
+    return AccountOut(**row)
 
 
 # --- disconnect ----------------------------------------------------------------------

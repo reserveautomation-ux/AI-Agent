@@ -525,6 +525,8 @@ button.avatar { padding: 0; cursor: pointer; }
 }
 .suggest-chip:hover { border-color: var(--p-teal); }
 .suggest-chip.on { border-color: var(--p-teal); background: var(--p-teal); color: #fff; }
+.access-pick { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
+.access-pick .suggest-chip { padding: 3px 10px; font-size: 0.85rem; }
 .style-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .briefing-box { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 0 0 14px; }
 .briefing-box input[type="time"] { width: auto; }

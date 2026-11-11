@@ -17,6 +17,7 @@ from psycopg import AsyncConnection
 from psycopg.types.json import Jsonb
 from workforce_core import upi_link as upi
 from workforce_core import whatsapp_link as wa
+from workforce_core.access import blocking_connector, is_read_only, read_only_message
 from workforce_core.approvals import binding_for, canonical_json
 from workforce_core.db import record_audit
 from workforce_core.memory import MemoryRejected, format_for_prompt, recall, remember
@@ -152,6 +153,12 @@ class ToolGateway:
                 agent_allowed_tools=frozenset(self.agent.allowed_tools),
             ),
         )
+        read_only = blocking_connector(name)
+        if read_only and decision != Decision.DENY:
+            if await is_read_only(self.conn, self.ctx.workspace_id, read_only):
+                decision = Decision.DENY
+            else:
+                read_only = None
         idem = f"{self.ctx.task_id}:{self.ctx.step_id}:{tool_use_id}"
         args_hash = hashlib.sha256(canonical_json(args).encode()).hexdigest()
 
@@ -166,6 +173,10 @@ class ToolGateway:
             return existing["result_json"]["text"], False  # replay after a crash
 
         inv_id = await self._record(name, spec.risk_tier, idem, args_hash, args, decision)
+
+        if decision == Decision.DENY and read_only:
+            await self._audit("policy.denied", {"tool": name, "reason": "read_only"})
+            return f"Not allowed: {read_only_message(read_only)}", True
 
         if decision == Decision.DENY:
             reason = "the emergency stop is on" if ks["kill_switch"] else "policy forbids it"

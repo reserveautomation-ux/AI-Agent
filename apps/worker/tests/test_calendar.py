@@ -234,3 +234,41 @@ def test_calendar_cannot_be_connected_on_this_server_fails_honestly(database_url
     task, status, seen = _scheduling_task(database_url, db, workspace, Integrations())
     assert status != "blocked"
     assert "isn't set up on the server" in seen["availability"]
+
+
+def test_read_only_calendar_can_be_checked_but_not_changed(database_url, db, workspace):
+    _connect_calendar(database_url, workspace.id)
+    db.execute(
+        "update tool_connections set can_act = false where workspace_id = %s"
+        " and provider = 'google_calendar'",
+        (workspace.id,),
+    )
+    fake = FakeCalendar()
+    task, status, seen = _scheduling_task(database_url, db, workspace, _integ(fake))
+    assert "busy Fri 20 Nov, 10:00–12:00" in seen["availability"]  # reading still works
+    assert status == "completed" and fake.created == []
+    assert not db.execute(
+        "select 1 from approval_requests where task_id = %s", (task,)
+    ).fetchone()  # not even asked
+    assert db.execute(
+        "select 1 from audit_events where action = 'policy.denied'"
+        " and event_json->>'reason' = 'read_only' and target_id = %s",
+        (task,),
+    ).fetchone()
+
+
+def test_switched_to_read_only_after_approval_is_not_done(database_url, db, workspace):
+    _connect_calendar(database_url, workspace.id)
+    fake = FakeCalendar()
+    integ = _integ(fake)
+    task, status, _ = _scheduling_task(database_url, db, workspace, integ)
+    assert status == "waiting_for_approval"
+    _decide(db, task, "approved")
+    db.execute(
+        "update tool_connections set can_act = false where workspace_id = %s"
+        " and provider = 'google_calendar'",
+        (workspace.id,),
+    )
+    run(database_url, lambda c: advance(c, FakeLLM(None, None, None), task, integrations=integ))
+    assert fake.created == []
+    assert "connected read-only" in _summary(db, task)[1]

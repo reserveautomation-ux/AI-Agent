@@ -329,6 +329,8 @@ export interface ConnectedAccount {
   scopes: string[];
   last_used_at: string | null;
   last_error: string | null;
+  /** False: read-only, the workforce can read this account but never send or change anything. */
+  can_act: boolean;
 }
 
 export interface ProviderConnections {
@@ -337,6 +339,8 @@ export interface ProviderConnections {
   description: string;
   configured: boolean;
   accounts: ConnectedAccount[];
+  /** It can be connected read-only (it has both reading and acting tools). */
+  read_only_option: boolean;
 }
 
 export interface ConnectorField {
@@ -367,6 +371,8 @@ export interface Connector {
   keywords: string;
   fields: ConnectorField[];
   accounts: ConnectedAccount[];
+  /** It can be connected read-only (it has both reading and acting tools). */
+  read_only_option: boolean;
 }
 
 // --- Chat ----------------------------------------------------------------------
