@@ -122,6 +122,11 @@ def binding_from_row(row: dict[str, Any]) -> ApprovalBinding:
 
 
 EDITABLE_MAX_CHARS = 5000
+# Owners can reword text before approving. Who/what/how much stays as prepared:
+# to change a recipient, amount or item, ask the agent to prepare it again.
+EDITABLE_FIELDS = frozenset(
+    {"subject", "body", "message", "text", "title", "caption", "description"}
+)
 
 
 def apply_edits(payload: dict[str, Any], changes: dict[str, str]) -> dict[str, Any]:
@@ -130,8 +135,8 @@ def apply_edits(payload: dict[str, Any], changes: dict[str, str]) -> dict[str, A
         raise ApprovalError("no changes given")
     updated = dict(payload)
     for key, value in changes.items():
-        if key not in payload or not isinstance(payload[key], str):
-            raise ApprovalError(f"{key!r} can't be edited")
+        if key not in EDITABLE_FIELDS or key not in payload or not isinstance(payload[key], str):
+            raise ApprovalError(f"{key!r} can't be edited here; ask the agent to change it")
         if not isinstance(value, str) or not value.strip():
             raise ApprovalError(f"{key!r} can't be empty")
         if len(value) > EDITABLE_MAX_CHARS:

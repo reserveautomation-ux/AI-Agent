@@ -448,6 +448,9 @@ def test_approve_flow(client, make_user, db):
     assert r.json()["status"] == "rejected" and r.json()["execution_status"] == "denied"
     assert _task_status(db, task["id"]) == "running"  # nothing left waiting -> worker resumes
 
+    mine = client.get(f"/approvals?state=all&task_id={task['id']}", headers=h).json()
+    assert {a["id"] for a in mine} == {a1, a2}
+    assert client.get("/approvals?task_id=nope", headers=h).status_code == 404
     decided = client.get("/approvals?state=decided", headers=h).json()
     assert {d["status"] for d in decided} == {"approved", "rejected"}
     events = db.execute(

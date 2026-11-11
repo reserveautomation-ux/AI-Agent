@@ -4,23 +4,19 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { api, downloadArtifact, post, type Artifact, type TaskDetail } from "@/lib/api";
+import { ApprovalCard } from "@/components/ApprovalCard";
+import {
+  api,
+  downloadArtifact,
+  post,
+  type ApprovalItem,
+  type Artifact,
+  type TaskDetail,
+} from "@/lib/api";
 
 const TERMINAL = new Set(["completed", "cancelled", "expired"]);
 const WORKING = new Set(["draft", "planned", "queued", "running", "verifying"]);
 
-const ACTION_LABEL: Record<string, string> = {
-  send_email: "Send email",
-  send_whatsapp: "Send WhatsApp",
-  calendar_create_event: "Create calendar event",
-  post_social: "Publish post",
-  deploy_web: "Deploy website",
-  book_flight: "Book flight",
-  place_stock_order: "Place stock order",
-  play_store_release: "Release on Play Store",
-  app_store_submit: "Submit to App Store",
-  browser_submit_form: "Submit web form",
-};
 
 function CsvPreview({ text }: { text: string }) {
   const rows = text
@@ -81,10 +77,17 @@ export default function TaskPage() {
   const [error, setError] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
 
   const load = useCallback(() => {
-    api<TaskDetail>(`/tasks/${id}`)
-      .then(setTask)
+    Promise.all([
+      api<TaskDetail>(`/tasks/${id}`),
+      api<ApprovalItem[]>(`/approvals?state=all&task_id=${id}`),
+    ])
+      .then(([t, a]) => {
+        setTask(t);
+        setApprovals(a);
+      })
       .catch((e) => setError(e.message));
   }, [id]);
 
@@ -121,7 +124,7 @@ export default function TaskPage() {
   if (error && !task) return <p className="error-text">{error}</p>;
   if (!task) return <p className="muted">Loading…</p>;
 
-  const pending = task.approvals.filter((a) => a.status === "pending");
+  const pending = approvals.filter((a) => a.status === "pending");
   const asking = task.status === "blocked" && task.steps.length === 0;
 
   return (
@@ -186,28 +189,20 @@ export default function TaskPage() {
         {error && <p className="error-text">{error}</p>}
       </div>
 
-      {pending.length > 0 && (
+      {approvals.length > 0 && (
         <>
-          <h2>Waiting for your approval</h2>
-          <p className="muted small">
-            Nothing below has been sent, booked or paid. One-tap approvals arrive in the next
-            update; each approval covers only the exact details shown.
-          </p>
+          <h2>{pending.length > 0 ? "Waiting for your approval" : "Approvals"}</h2>
           <div className="grid">
-            {pending.map((a) => (
-              <div key={a.id} className="agent approval">
-                <strong>{ACTION_LABEL[a.action] ?? a.action}</strong>
-                {a.recipient && <span className="small">To: {a.recipient}</span>}
-                {a.amount && (
-                  <span className="small">
-                    Amount: {a.amount} {a.currency}
-                  </span>
-                )}
-                <pre className="preview">{JSON.stringify(a.action_payload, null, 2)}</pre>
-                <span className="muted small">
-                  Expires {new Date(a.expires_at).toLocaleString()}
-                </span>
-              </div>
+            {approvals.map((a) => (
+              <ApprovalCard
+                key={a.id}
+                item={a}
+                showTask={false}
+                onDecided={(u) => {
+                  setApprovals((list) => list.map((x) => (x.id === u.id ? u : x)));
+                  load();
+                }}
+              />
             ))}
           </div>
         </>

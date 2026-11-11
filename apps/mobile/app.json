@@ -56,7 +56,13 @@
           ]
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Workforce OS uses Face ID to confirm payments, bookings and other high-impact actions you approve."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

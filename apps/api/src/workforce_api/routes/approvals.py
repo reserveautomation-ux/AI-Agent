@@ -6,6 +6,7 @@ the stored row no longer matches its own hash). Money and other high-impact
 actions (risk tier 3) can only be approved by the workspace owner.
 """
 
+import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -74,16 +75,30 @@ def _item(row: dict) -> ApprovalItem:
 async def list_approvals(
     user: UserDep,
     conn: ConnDep,
-    state: Literal["pending", "decided"] = "pending",
+    state: Literal["pending", "decided", "all"] = "pending",
+    task_id: str | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[ApprovalItem]:
     await conn.execute("select public.expire_approvals()")
-    where = "a.status = 'pending'" if state == "pending" else "a.status <> 'pending'"
+    where = {
+        "pending": "a.status = 'pending'",
+        "decided": "a.status <> 'pending'",
+        "all": "true",
+    }[state]
+    params: list = [user.workspace_id]
+    if task_id:
+        try:
+            uuid.UUID(task_id)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "task not found") from exc
+        where += " and a.task_id = %s"
+        params.append(task_id)
     order = "a.expires_at" if state == "pending" else "coalesce(a.decided_at, a.created_at) desc"
+    params.append(limit)
     rows = await (
         await conn.execute(
             f"{APPROVAL_SELECT} where a.workspace_id = %s and {where} order by {order} limit %s",
-            (user.workspace_id, limit),
+            params,
         )
     ).fetchall()
     return [_item(r) for r in rows]
@@ -232,7 +247,7 @@ async def reject(
 ) -> ApprovalItem:
     async with conn.transaction():
         row = await _load_for_decision(conn, user, approval_id, body.action_hash)
-        reason = body.reason or "declined by owner"
+        reason = body.reason or None
         await conn.execute(
             "update public.approval_requests set status = 'rejected', decided_at = now()"
             " where id = %s",
@@ -243,7 +258,10 @@ async def reject(
                    completed_at = now()
                where id = (select tool_invocation_id from public.approval_requests
                            where id = %s)""",
-            (f"Declined by the owner: {reason}", approval_id),
+            (
+                f"Declined by the owner: {reason}" if reason else "Declined by the owner.",
+                approval_id,
+            ),
         )
         await _event(conn, user, row, "rejected", reason)
         await record_audit(

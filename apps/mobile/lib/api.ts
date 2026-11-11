@@ -217,3 +217,24 @@ export interface Memory {
   use_count: number;
   created_at: string;
 }
+
+export interface ApprovalItem {
+  id: string;
+  task_id: string;
+  task_title: string;
+  action: string;
+  action_payload: Record<string, unknown>;
+  action_hash: string;
+  amount: string | null;
+  currency: string | null;
+  recipient: string | null;
+  item: string | null;
+  risk_tier: number;
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'consumed' | 'invalidated';
+  expires_at: string;
+  created_at: string;
+  decided_at: string | null;
+  execution_status: string | null;
+  execution_result: string | null;
+  owner_only: boolean;
+}

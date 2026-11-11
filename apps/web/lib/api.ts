@@ -241,3 +241,93 @@ export interface Memory {
   last_used_at: string | null;
   created_at: string;
 }
+
+export interface ApprovalItem {
+  id: string;
+  task_id: string;
+  task_title: string;
+  action: string;
+  action_payload: Record<string, unknown>;
+  action_hash: string;
+  amount: string | null;
+  currency: string | null;
+  recipient: string | null;
+  item: string | null;
+  risk_tier: number;
+  status: "pending" | "approved" | "rejected" | "expired" | "consumed" | "invalidated";
+  expires_at: string;
+  created_at: string;
+  decided_at: string | null;
+  execution_status: string | null;
+  execution_result: string | null;
+  owner_only: boolean;
+}
+
+export const ACTION_LABEL: Record<string, string> = {
+  send_email: "Send email",
+  send_whatsapp: "Send WhatsApp",
+  calendar_create_event: "Create calendar event",
+  post_social: "Publish post",
+  deploy_web: "Deploy website",
+  book_flight: "Book flight",
+  place_stock_order: "Place stock order",
+  play_store_release: "Release on Play Store",
+  app_store_submit: "Submit to App Store",
+  browser_submit_form: "Submit web form",
+};
+
+const FIELD_LABEL: Record<string, string> = {
+  to: "To", subject: "Subject", body: "Message", message: "Message", text: "Text",
+  network: "Network", title: "Title", start: "Starts", end: "Ends", symbol: "Stock",
+  side: "Buy/Sell", quantity: "Quantity", order_type: "Order type", amount: "Amount",
+  currency: "Currency", url: "Website", fields: "Form details", offer_id: "Offer",
+};
+
+export const fieldLabel = (k: string) => FIELD_LABEL[k] ?? k.replaceAll("_", " ");
+
+export function fieldValue(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object") {
+    return Object.entries(v as Record<string, unknown>)
+      .map(([k, val]) => `${k}: ${String(val)}`)
+      .join("\n");
+  }
+  return String(v);
+}
+
+export function expiresIn(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return "expired";
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  return h >= 1 ? `${h}h ${m}m left` : `${m}m left`;
+}
+
+export function formatMoney(amount: string, currency: string | null): string {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return `${amount} ${currency ?? ""}`.trim();
+  try {
+    return currency
+      ? new Intl.NumberFormat("en-IN", { style: "currency", currency }).format(n)
+      : new Intl.NumberFormat("en-IN").format(n);
+  } catch {
+    return `${n.toLocaleString("en-IN")} ${currency ?? ""}`.trim();
+  }
+}
+
+/** Payload fields to list (amount/currency are shown separately, large). */
+export function detailEntries(payload: Record<string, unknown>, hasAmount: boolean): [string, unknown][] {
+  return Object.entries(payload).filter(([k]) => !(hasAmount && (k === "amount" || k === "currency")));
+}
+
+/** Text fields the owner may reword before approving (matches the API). */
+export const EDITABLE_FIELDS = new Set(["subject", "body", "message", "text", "title", "caption", "description"]);
+
+/** Badge for a decided approval, honest about whether the action actually happened. */
+export function decidedBadge(status: string, execution: string | null): [string, "ok" | "warn" | "info" | "muted" | "bad"] {
+  if (status === "rejected") return ["Declined", "muted"];
+  if (status === "expired") return ["Expired", "bad"];
+  if (status === "invalidated") return ["Cancelled (changed)", "bad"];
+  if (status === "approved") return ["Approved · running", "info"];
+  return execution === "succeeded" ? ["Approved · done", "ok"] : ["Approved · not done", "warn"];
+}

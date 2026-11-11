@@ -3,41 +3,14 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
 import { Badge, Button, Card, ErrorText, H, Input, T, styles } from '@/components/ui';
-import { api, post, shareArtifact, type TaskDetail } from '@/lib/api';
+import { ApprovalCard } from '@/components/ApprovalCard';
+import { api, post, shareArtifact, type ApprovalItem, type TaskDetail } from '@/lib/api';
 import { useTheme } from '@/lib/theme';
 
 const TERMINAL = new Set(['completed', 'cancelled', 'expired']);
 const WORKING = new Set(['draft', 'planned', 'queued', 'running', 'verifying']);
 
-const ACTION_LABEL: Record<string, string> = {
-  send_email: 'Send email',
-  send_whatsapp: 'Send WhatsApp',
-  calendar_create_event: 'Create calendar event',
-  post_social: 'Publish post',
-  deploy_web: 'Deploy website',
-  book_flight: 'Book flight',
-  place_stock_order: 'Place stock order',
-  play_store_release: 'Release on Play Store',
-  app_store_submit: 'Submit to App Store',
-  browser_submit_form: 'Submit web form',
-};
 
-const FIELD_LABEL: Record<string, string> = {
-  subject: 'Subject',
-  body: 'Message',
-  message: 'Message',
-  text: 'Text',
-  network: 'Network',
-  title: 'Title',
-  start: 'Starts',
-  end: 'Ends',
-  symbol: 'Stock',
-  side: 'Buy/Sell',
-  quantity: 'Quantity',
-  order_type: 'Order type',
-  amount: 'Amount',
-  currency: 'Currency',
-};
 
 function CsvTable({ text }: { text: string }) {
   const c = useTheme();
@@ -73,10 +46,16 @@ export default function TaskScreen() {
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [openStep, setOpenStep] = useState<number | null>(null);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
 
   const load = useCallback(async () => {
     try {
-      setTask(await api<TaskDetail>(`/tasks/${id}`));
+      const [t, a] = await Promise.all([
+        api<TaskDetail>(`/tasks/${id}`),
+        api<ApprovalItem[]>(`/approvals?state=all&task_id=${id}`),
+      ]);
+      setTask(t);
+      setApprovals(a);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -118,7 +97,7 @@ export default function TaskScreen() {
     );
   }
 
-  const pending = task.approvals.filter((a) => a.status === 'pending');
+  const pending = approvals.filter((a) => a.status === 'pending');
   const asking = task.status === 'blocked' && task.steps.length === 0;
 
   return (
@@ -200,31 +179,19 @@ export default function TaskScreen() {
         <ErrorText>{error}</ErrorText>
       </Card>
 
-      {pending.length > 0 && (
+      {approvals.length > 0 && (
         <>
-          <H>Waiting for your approval</H>
-          <T small muted>
-            Nothing here has been sent, booked or paid. One-tap approvals arrive in the next update.
-          </T>
-          {pending.map((a) => (
-            <Card key={a.id} style={{ borderColor: c.warn, marginTop: 10 }}>
-              <T bold>{ACTION_LABEL[a.action] ?? a.action}</T>
-              {a.recipient && <T small>To: {a.recipient}</T>}
-              {a.amount && <T small>Amount: {a.amount} {a.currency}</T>}
-              <View style={{ marginTop: 8, gap: 4 }}>
-                {Object.entries(a.action_payload)
-                  .filter(([k]) => k !== 'to')
-                  .map(([k, v]) => (
-                    <T key={k} small>
-                      <T small bold>{FIELD_LABEL[k] ?? k}: </T>
-                      {typeof v === 'string' ? v : JSON.stringify(v)}
-                    </T>
-                  ))}
-              </View>
-              <T small muted style={{ marginTop: 6 }}>
-                Expires {new Date(a.expires_at).toLocaleString()}
-              </T>
-            </Card>
+          <H>{pending.length > 0 ? 'Waiting for your approval' : 'Approvals'}</H>
+          {approvals.map((a) => (
+            <ApprovalCard
+              key={a.id}
+              item={a}
+              showTask={false}
+              onDecided={(u) => {
+                setApprovals((list) => list.map((x) => (x.id === u.id ? u : x)));
+                load();
+              }}
+            />
           ))}
         </>
       )}

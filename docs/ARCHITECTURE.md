@@ -99,6 +99,24 @@ instruction ─► Chief plans (Claude, structured output, uses your memories)
 - **Refusal fallback:** model calls opt into Anthropic's server-side fallback, so a
   safety-classifier decline is retried on the recommended fallback model.
 
+## Approval centre
+
+- Every action that sends, books, buys or publishes is prepared by an agent and held as an
+  approval bound to its exact details (hash of recipient, amount, item, text, expiry, policy).
+- The owner sees it on the **Approvals** tab (phone and web, with a badge and a push
+  notification) and can **Approve**, **Decline**, or **Edit** the wording first. Recipients,
+  amounts and items can't be edited there: ask the agent to prepare it again.
+- The client sends back the hash it displayed; if the action changed since, or the stored row
+  no longer matches its hash, the approval is refused.
+- Tier 3 (money / high impact) is owner-only, and on phones needs Face ID or a fingerprint.
+- Unanswered approvals expire (default 24 h).
+- After the owner decides, a worker re-checks each approval, marks it used *before* running it
+  (so it happens at most once), carries it out, and reports the result. If a worker stops
+  mid-action, the result is "outcome unknown" and it is never repeated automatically.
+- Today, web forms really submit (on the approved site). Email, WhatsApp, calendar, social,
+  flights, broker orders and store releases report "not connected yet" until their
+  integrations are added (next phase).
+
 ## Agent lifecycle: clone the strong, retire the weak
 
 `lifecycle.py` + `/workforce/lifecycle-review`:
@@ -146,7 +164,7 @@ Re-check each provider's current terms before enabling it.
 | **1. Foundation** ✅ | Schema, auth, task API, workforce + lifecycle, audit, kill switch, web app, voice |
 | **1b. Browser & memory** ✅ | Sandboxed browser; workspace + per-agent memory |
 | **2. Agents at work** ✅ | Background workers; Chief plans with Claude; specialists use tools; verifier; files; held approvals |
-| 3. Approvals | Approval centre UI, approval-bound execution, notifications |
+| **3. Approvals** ✅ | Approval centre (phone + web), edit wording then approve, Face ID / fingerprint for money, at-most-once execution, expiry |
 | 4. Reliability | Failure/restart tests, evaluations feeding the lifecycle, cost tracking, staging deploy |
 | 5. Email & calendar | Google OAuth connections |
 | **6. Mobile app** ✅ | Expo app (Android + iOS): native voice, push notifications, share files |

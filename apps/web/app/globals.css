@@ -213,3 +213,14 @@ input[type="search"] { margin-bottom: 4px; }
 .steps p { margin: 4px 0; }
 .approval { border-color: var(--warn); }
 .warn-text { color: var(--warn); }
+
+/* Approvals */
+.count { margin-left: 6px; background: var(--bad); color: #fff; border-radius: 999px; font-size: 0.72rem; padding: 1px 7px; font-weight: 700; }
+.approval-card.pending { border: 1.5px solid var(--warn); }
+.approval-card.owner { border: 1.5px solid var(--bad); }
+.approval-card .amount { font-size: 1.4rem; font-weight: 700; }
+.approval-card .task-link { color: var(--info); text-decoration: none; }
+.fields { display: grid; gap: 8px; margin: 4px 0; }
+.fields dt { color: var(--muted); font-size: 0.8rem; }
+.fields dd { margin: 0; }
+.ok-text { color: var(--ok); }

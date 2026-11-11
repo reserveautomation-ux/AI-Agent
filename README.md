@@ -12,7 +12,9 @@ The Chief AI Executive plans it, specialist agents do the steps with real tools
 (web search, a sandboxed browser, memory, reports), the QA Verifier checks the
 result, and you get a summary plus downloadable files. Work runs in the
 background and survives restarts. Anything that sends, books, buys or publishes
-is prepared and held for your approval (one-tap approvals come in phase 3).
+is prepared and held for your approval on the **Approvals** tab: approve, decline
+or reword it first. Money actions need Face ID / fingerprint on the phone, and an
+approved action runs at most once.
 
 Voice input uses the browser's built-in speech recognition (Chrome, Edge,
 Safari, Android, iPhone). Firefox doesn't support it yet; typing still works there.
