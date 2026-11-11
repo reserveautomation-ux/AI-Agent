@@ -96,6 +96,16 @@ PROVIDERS: tuple[Provider, ...] = (
         "Sign in with Slack; posts approved messages to channels.",
     ),
     Provider(
+        "gmail_inbox",
+        "Gmail inbox",
+        "communication",
+        Access.OFFICIAL_API,
+        "Separate connection with read + compose permission: agents search and read your mail, "
+        "save reply drafts in Gmail (never sent by them), and alert you about important mail. "
+        "Reading mail is a Google 'restricted' permission: fine for up to 100 users, then Google's "
+        "review and security assessment are needed.",
+    ),
+    Provider(
         "gmail",
         "Gmail",
         "communication",

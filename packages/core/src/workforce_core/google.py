@@ -7,12 +7,15 @@ is connected.
 
 import base64
 import hashlib
+import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 from email.utils import formataddr, getaddresses
+from html import unescape
 from typing import Any
 from urllib.parse import urlencode
 
@@ -181,6 +184,182 @@ async def gmail_send(http: httpx.AsyncClient, access_token: str, msg: EmailMessa
         except ValueError:
             detail = resp.text
         raise GoogleError(f"Gmail refused to send: {detail}")
+    return resp.json()
+
+
+# --- inbox (read + drafts) -------------------------------------------------------------
+
+GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
+GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose"
+
+
+async def _google_get(http: httpx.AsyncClient, token: str, url: str, params=None) -> dict:
+    resp = await http.get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
+    if resp.status_code == 401:
+        raise GrantRevoked("Google rejected the access token")
+    if resp.status_code >= 400:
+        raise GoogleError(f"Google refused: {_error_text(resp)}")
+    return resp.json()
+
+
+def _error_text(resp: httpx.Response) -> str:
+    try:
+        return resp.json().get("error", {}).get("message", resp.text[:200])
+    except ValueError:
+        return resp.text[:200]
+
+
+def _headers(payload: dict) -> dict[str, str]:
+    return {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
+
+
+def _b64(data: str) -> str:
+    return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)).decode("utf-8", "replace")
+
+
+def _strip_html(html: str) -> str:
+    html = re.sub(r"(?is)<(script|style).*?</\1>", " ", html)
+    html = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</li>", "\n", html)
+    text = re.sub(r"<[^>]+>", " ", html)
+    return unescape(re.sub(r"[ \t]+", " ", text))
+
+
+def message_text(payload: dict) -> str:
+    """The readable body of a Gmail message: plain text if present, else HTML stripped."""
+    plain: list[str] = []
+    html: list[str] = []
+
+    def walk(part: dict) -> None:
+        mime = part.get("mimeType", "")
+        data = part.get("body", {}).get("data")
+        if data and mime == "text/plain":
+            plain.append(_b64(data))
+        elif data and mime == "text/html":
+            html.append(_b64(data))
+        for sub in part.get("parts", []) or []:
+            walk(sub)
+
+    walk(payload)
+    text = "\n".join(plain) if plain else _strip_html("\n".join(html))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _summary(msg: dict) -> dict[str, Any]:
+    h = _headers(msg.get("payload", {}))
+    return {
+        "id": msg["id"],
+        "thread_id": msg.get("threadId"),
+        "from": h.get("from", ""),
+        "to": h.get("to", ""),
+        "subject": h.get("subject", "(no subject)"),
+        "date": h.get("date", ""),
+        "snippet": unescape(msg.get("snippet", "")),
+        "labels": msg.get("labelIds", []),
+        "internal_ms": int(msg.get("internalDate", 0) or 0),
+        "message_id": h.get("message-id", ""),
+    }
+
+
+async def gmail_search(
+    http: httpx.AsyncClient, token: str, query: str, max_results: int = 10
+) -> list[dict[str, Any]]:
+    """Messages matching a Gmail search (same syntax as the Gmail search box)."""
+    found = await _google_get(
+        http,
+        token,
+        f"{GMAIL_API}/messages",
+        params={"q": query, "maxResults": max(1, min(max_results, 25))},
+    )
+    out = []
+    for m in found.get("messages", []) or []:
+        full = await _google_get(
+            http,
+            token,
+            f"{GMAIL_API}/messages/{m['id']}",
+            params=[
+                ("format", "metadata"),
+                ("metadataHeaders", "From"),
+                ("metadataHeaders", "To"),
+                ("metadataHeaders", "Subject"),
+                ("metadataHeaders", "Date"),
+            ],
+        )
+        out.append(_summary(full))
+    return out
+
+
+async def gmail_get(http: httpx.AsyncClient, token: str, message_id: str) -> dict[str, Any]:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", message_id or ""):
+        raise ValueError("that isn't a Gmail message id; search first")
+    msg = await _google_get(http, token, f"{GMAIL_API}/messages/{message_id}", {"format": "full"})
+    info = _summary(msg)
+    info["text"] = message_text(msg.get("payload", {}))
+    info["cc"] = _headers(msg.get("payload", {})).get("cc", "")
+    return info
+
+
+async def gmail_create_draft(
+    http: httpx.AsyncClient, token: str, msg: EmailMessage, thread_id: str | None = None
+) -> dict:
+    """Save a draft in the owner's Gmail. Nothing is sent."""
+    message: dict[str, Any] = {"raw": base64.urlsafe_b64encode(msg.as_bytes()).decode()}
+    if thread_id:
+        message["threadId"] = thread_id
+    resp = await http.post(
+        f"{GMAIL_API}/drafts",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"message": message},
+    )
+    if resp.status_code == 401:
+        raise GrantRevoked("Gmail rejected the access token")
+    if resp.status_code >= 400:
+        raise GoogleError(f"Gmail couldn't save the draft: {_error_text(resp)}")
+    return resp.json()
+
+
+# --- Drive (only files this app creates) ---------------------------------------------
+
+DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
+DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3/files"
+GOOGLE_DOC = "application/vnd.google-apps.document"
+GOOGLE_SHEET = "application/vnd.google-apps.spreadsheet"
+
+
+async def drive_upload(
+    http: httpx.AsyncClient,
+    token: str,
+    *,
+    name: str,
+    content: bytes,
+    source_type: str,
+    convert_to: str | None = None,
+) -> dict:
+    """Upload a file to the owner's Drive, optionally as a Google Doc or Sheet."""
+    meta: dict[str, Any] = {"name": name}
+    if convert_to:
+        meta["mimeType"] = convert_to
+    boundary = "wfos" + base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+    body = (
+        f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n".encode()
+        + json.dumps(meta).encode()
+        + f"\r\n--{boundary}\r\nContent-Type: {source_type}\r\n\r\n".encode()
+        + content
+        + f"\r\n--{boundary}--".encode()
+    )
+    resp = await http.post(
+        DRIVE_UPLOAD,
+        params={"uploadType": "multipart", "fields": "id,name,mimeType,webViewLink"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": f"multipart/related; boundary={boundary}",
+        },
+        content=body,
+    )
+    if resp.status_code == 401:
+        raise GrantRevoked("Google Drive rejected the access token")
+    if resp.status_code >= 400:
+        raise GoogleError(f"Google Drive refused the upload: {_error_text(resp)}")
     return resp.json()
 
 

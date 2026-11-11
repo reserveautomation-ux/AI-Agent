@@ -56,7 +56,15 @@ DEPARTMENTS: tuple[DepartmentTemplate, ...] = (
 A = AgentTemplate
 
 # Safe general-purpose tools (tiers 0-1) any capable agent may use.
-GENERAL = ("web_search", "web_fetch", "browse_page", "recall", "run_code", "create_document")
+GENERAL = (
+    "web_search",
+    "web_fetch",
+    "browse_page",
+    "recall",
+    "run_code",
+    "create_document",
+    "save_to_drive",
+)
 
 _AGENT_DEFS: tuple[AgentTemplate, ...] = (
     A(
@@ -103,7 +111,14 @@ _AGENT_DEFS: tuple[AgentTemplate, ...] = (
         "specialist",
         "personal_executive",
         "Drafts and (with approval) sends email.",
-        ("draft_email", "send_email", "recall"),
+        (
+            "draft_email",
+            "send_email",
+            "gmail_search",
+            "gmail_read",
+            "gmail_create_draft",
+            "recall",
+        ),
     ),
     A(
         "pe_calendar",

@@ -6,9 +6,13 @@ say plainly that it wasn't done. Never pretend an action happened.
 
 import base64
 import json
+import mimetypes
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from email.utils import parseaddr
+from html import escape
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -16,6 +20,8 @@ import httpx
 from psycopg import AsyncConnection
 from workforce_core.connectors import CONNECTORS_BY_KEY, AuthKind, connector_for_tool
 from workforce_core.google import (
+    GOOGLE_DOC,
+    GOOGLE_SHEET,
     EventExists,
     GoogleConfig,
     GoogleError,
@@ -25,8 +31,12 @@ from workforce_core.google import (
     build_event,
     calendar_busy,
     calendar_insert,
+    drive_upload,
     event_id_for,
     fresh_access_token,
+    gmail_create_draft,
+    gmail_get,
+    gmail_search,
     gmail_send,
 )
 from workforce_core.secrets import SecretBox, SecretError, load_secret, update_secret
@@ -287,6 +297,138 @@ async def check_availability(
         return f"Free the whole time ({tz})."
     lines = [f"- busy {_when(b['start'], b['end'], tz)}" for b in busy]
     return f"Busy times ({tz}); everything else is free:\n" + "\n".join(lines)
+
+
+# --- inbox & drive (read / drafts / save: no approval needed, nothing is sent) ----------
+
+
+def _from_name(value: str) -> str:
+    name, addr = parseaddr(value)
+    return name or addr or value
+
+
+async def inbox_search(
+    conn: AsyncConnection, ws: str, args: dict[str, Any], integ: Integrations
+) -> str:
+    s = await open_session(conn, ws, "gmail_inbox", integ)
+    query = str(args.get("query") or "in:inbox newer_than:2d")
+    found = await _call(
+        s, lambda: gmail_search(s.http, s.token, query, int(args.get("max_results") or 10))
+    )
+    if not found:
+        return f"No emails match {query!r}."
+    lines = [
+        f"- id {m['id']} | {m['date']} | from {m['from']} | {m['subject']}"
+        + (" | UNREAD" if "UNREAD" in m["labels"] else "")
+        + (" | IMPORTANT" if "IMPORTANT" in m["labels"] else "")
+        + f"\n  {m['snippet'][:200]}"
+        for m in found
+    ]
+    return f"{len(found)} email(s) for {query!r}:\n" + "\n".join(lines)
+
+
+async def inbox_read(
+    conn: AsyncConnection, ws: str, args: dict[str, Any], integ: Integrations
+) -> str:
+    s = await open_session(conn, ws, "gmail_inbox", integ)
+    m = await _call(s, lambda: gmail_get(s.http, s.token, str(args.get("message_id", ""))))
+    text = m["text"]
+    if len(text) > 12_000:
+        text = text[:12_000] + "\n[…cut]"
+    return (
+        f"From: {m['from']}\nTo: {m['to']}\n"
+        + (f"Cc: {m['cc']}\n" if m["cc"] else "")
+        + f"Date: {m['date']}\nSubject: {m['subject']}\nThread: {m['thread_id']}\n\n{text}"
+    )
+
+
+async def inbox_draft(
+    conn: AsyncConnection, ws: str, args: dict[str, Any], integ: Integrations
+) -> str:
+    s = await open_session(conn, ws, "gmail_inbox", integ)
+    subject = str(args.get("subject", ""))
+    thread_id, orig = None, None
+    if args.get("reply_to_id"):
+        orig = await _call(s, lambda: gmail_get(s.http, s.token, str(args["reply_to_id"])))
+        thread_id = orig["thread_id"]
+        if subject and not subject.lower().startswith("re:"):
+            subject = f"Re: {subject}"
+    msg = build_email(
+        sender=s.display,
+        to=str(args.get("to", "")),
+        subject=subject,
+        body=str(args.get("body", "")),
+        cc=args.get("cc") or None,
+    )
+    if orig:
+        mid = orig.get("message_id")
+        if mid:
+            msg["In-Reply-To"] = mid
+            msg["References"] = mid
+    draft = await _call(s, lambda: gmail_create_draft(s.http, s.token, msg, thread_id))
+    return (
+        f"Saved a draft in {s.display}'s Gmail to {msg['To']} ({msg['Subject']}). It is not sent; "
+        f"the owner can review and send it from Gmail › Drafts (draft {draft.get('id', '?')})."
+    )
+
+
+def _md_to_html(md: str) -> str:
+    """Just enough Markdown for a tidy Google Doc: headings, lists, bold, paragraphs."""
+    out: list[str] = []
+    in_list = False
+    for line in md.splitlines():
+        text = escape(line.strip())
+        text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+        bullet = re.match(r"^[-*•]\s+(.*)", text)
+        if bullet:
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{bullet.group(1)}</li>")
+            continue
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+        heading = re.match(r"^(#{1,3})\s+(.*)", text)
+        if heading:
+            n = len(heading.group(1))
+            out.append(f"<h{n}>{heading.group(2)}</h{n}>")
+        elif text:
+            out.append(f"<p>{text}</p>")
+    if in_list:
+        out.append("</ul>")
+    return "<html><body>" + "\n".join(out) + "</body></html>"
+
+
+async def drive_save(
+    conn: AsyncConnection, ws: str, args: dict[str, Any], integ: Integrations, task_id: str
+) -> str:
+    s = await open_session(conn, ws, "google_drive", integ)
+    files = await _task_files(conn, task_id, [str(f) for f in args.get("files") or []])
+    mode = str(args.get("as") or "doc")
+    saved = []
+    for name, content in files.items():
+        stem, _, ext = name.rpartition(".")
+        stem, ext = (stem or name), ext.lower()
+        if mode == "sheet" and ext == "csv":
+            kind, convert, body, title = "text/csv", GOOGLE_SHEET, content, stem
+        elif mode == "doc" and ext in ("md", "txt", "html"):
+            if ext == "md":
+                body, kind = _md_to_html(content.decode("utf-8", "replace")).encode(), "text/html"
+            else:
+                body, kind = content, ("text/html" if ext == "html" else "text/plain")
+            convert, title = GOOGLE_DOC, stem
+        else:
+            kind = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            convert, body, title = None, content, name
+        made = await _call(
+            s,
+            lambda title=title, body=body, kind=kind, convert=convert: drive_upload(
+                s.http, s.token, name=title, content=body, source_type=kind, convert_to=convert
+            ),
+        )
+        saved.append(f"{made.get('name', title)}: {made.get('webViewLink', 'in your Drive')}")
+    return "Saved to Google Drive:\n" + "\n".join(f"- {x}" for x in saved)
 
 
 # --- messaging ------------------------------------------------------------------------

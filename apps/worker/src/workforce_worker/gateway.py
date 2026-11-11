@@ -23,8 +23,26 @@ from workforce_core.tools import TOOLS_BY_NAME
 
 from .artifacts import csv_stats, save_artifact
 from .browser import BlockedURL, BrowserError, BrowserService
-from .executor import ActionFailed, Integrations, NotConnected, check_availability
+from .executor import (
+    ActionFailed,
+    Integrations,
+    NotConnected,
+    check_availability,
+    drive_save,
+    inbox_draft,
+    inbox_read,
+    inbox_search,
+)
 from .prompts import untrusted
+
+# Tools that use a connected account but need no approval (read, draft, save).
+CONNECTED_TOOLS = {
+    "calendar_check_availability",
+    "gmail_search",
+    "gmail_read",
+    "gmail_create_draft",
+    "save_to_drive",
+}
 
 # Tools executed by Anthropic's servers (declared, not run by us).
 SERVER_TOOLS = {"web_search", "web_fetch", "run_code"}
@@ -321,11 +339,18 @@ class ToolGateway:
             self.ctx.artifacts.append(art)
             return f"Saved file {art['name']}{extra}."
 
-        if name == "calendar_check_availability":
+        if name in CONNECTED_TOOLS:
+            ws, integ = self.ctx.workspace_id, self.integrations
             try:
-                return await check_availability(
-                    self.conn, self.ctx.workspace_id, args, self.integrations
-                )
+                if name == "calendar_check_availability":
+                    return await check_availability(self.conn, ws, args, integ)
+                if name == "gmail_search":
+                    return untrusted("gmail", await inbox_search(self.conn, ws, args, integ))
+                if name == "gmail_read":
+                    return untrusted("gmail", await inbox_read(self.conn, ws, args, integ))
+                if name == "gmail_create_draft":
+                    return await inbox_draft(self.conn, ws, args, integ)
+                return await drive_save(self.conn, ws, args, integ, self.ctx.task_id)
             except NotConnected as exc:
                 if exc.fixable and exc.connector:
                     self.ctx.needs_connections.add(exc.connector)

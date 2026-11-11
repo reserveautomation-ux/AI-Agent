@@ -112,7 +112,8 @@ builds get them.
 One-time setup in Google Cloud (about 10 minutes):
 
 1. Go to **console.cloud.google.com**, create a project (e.g. "Workforce OS").
-2. **APIs & Services → Library**: enable the **Gmail API** and the **Google Calendar API**.
+2. **APIs & Services → Library**: enable the **Gmail API**, the **Google Calendar API** and the
+   **Google Drive API**.
 3. **Google Auth Platform → Branding / Audience** (the OAuth consent screen):
    - User type **External**, app name "Workforce OS", your email as support contact.
    - **Data access → Add scopes** (nothing else):
@@ -120,6 +121,11 @@ One-time setup in Google Cloud (about 10 minutes):
      - `.../auth/gmail.send`: *Send email on your behalf*
      - `.../auth/calendar.events.owned`: *create events on calendars you own*
      - `.../auth/calendar.freebusy`: *view your availability* (busy times only)
+     - `.../auth/gmail.readonly` and `.../auth/gmail.compose`: for **Gmail inbox** (read mail,
+       save reply drafts, important-email alerts). These are Google *restricted* scopes: fine
+       for you and up to 100 users; before opening to more people Google requires its review
+       plus a yearly security assessment.
+     - `.../auth/drive.file`: for **Google Drive** (the app only sees files it creates)
 4. **Publishing status**: while the app is in **Testing**, add your Gmail as a *test
    user*. Google then makes the connection **expire every 7 days** (you'd have to
    reconnect weekly). To avoid that, click **Publish app**. Google shows an
@@ -143,6 +149,11 @@ One-time setup in Google Cloud (about 10 minutes):
    to India (IST); meetings and "next Friday" use it.
 
 What the app can and can't do:
+- **Gmail inbox** (separate connection): search and read your mail, save reply drafts in
+  Gmail › Drafts (agents never send them), and a phone alert when mail Gmail marks as
+  important arrives (promotions and social are skipped; checked every 3 minutes).
+- **Google Drive:** save what agents make as Google Docs, Sheets or files. It can only see
+  files it created, never the rest of your Drive.
 - **Gmail:** only **send** emails, and only ones you approve. It can't read, search or
   delete your mail.
 - **Calendar:** see when you're **busy** (not what your meetings are) and **add events you

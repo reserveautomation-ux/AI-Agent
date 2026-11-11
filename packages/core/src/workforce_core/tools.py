@@ -162,6 +162,65 @@ TOOLS: tuple[ToolSpec, ...] = (
         _obj(to=_S, subject=_S, body=_S),
     ),
     ToolSpec(
+        "gmail_search",
+        "communication",
+        "Search the owner's Gmail (Gmail search syntax, e.g. 'is:unread newer_than:2d', "
+        "'from:rahul subject:invoice'). Returns sender, subject, date, snippet and ids.",
+        T.READ,
+        "gmail_inbox",
+        {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer", "minimum": 1, "maximum": 25},
+            },
+            "required": ["query"],
+        },
+    ),
+    ToolSpec(
+        "gmail_read",
+        "communication",
+        "Read one email in full by its id (from gmail_search).",
+        T.READ,
+        "gmail_inbox",
+        _obj(message_id=_S),
+    ),
+    ToolSpec(
+        "gmail_create_draft",
+        "communication",
+        "Save an email draft in the owner's Gmail (not sent; they review and send it). "
+        "Give reply_to_id to draft a reply in the same thread.",
+        T.INTERNAL_WRITE,
+        "gmail_inbox",
+        {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string"},
+                "subject": {"type": "string"},
+                "body": {"type": "string"},
+                "cc": {"type": "string"},
+                "reply_to_id": {"type": "string"},
+            },
+            "required": ["to", "subject", "body"],
+        },
+    ),
+    ToolSpec(
+        "save_to_drive",
+        "documents",
+        "Save files made in this task to the owner's Google Drive. as='doc' makes a Google Doc "
+        "(from markdown/html/txt), 'sheet' a Google Sheet (from csv), 'file' keeps it as is.",
+        T.INTERNAL_WRITE,
+        "google_drive",
+        {
+            "type": "object",
+            "properties": {
+                "files": {"type": "array", "items": {"type": "string"}},
+                "as": {"type": "string", "enum": ["doc", "sheet", "file"]},
+            },
+            "required": ["files"],
+        },
+    ),
+    ToolSpec(
         "remember",
         "memory",
         "Save something worth remembering to long-term memory.",

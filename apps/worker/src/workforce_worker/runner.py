@@ -12,6 +12,7 @@ import logging
 import os
 import signal
 import socket
+import time
 import uuid
 
 import anthropic
@@ -24,6 +25,7 @@ from workforce_core.db import sync_tool_definitions
 from .agent_loop import AgentError
 from .browser import BrowserService, DomainPolicy
 from .executor import Integrations
+from .inbox import check_inboxes
 from .llm import LLM, AnthropicLLM, BudgetExceeded, Refused
 from .notify import ExpoPusher, Pusher, notify_task
 from .pipeline import TaskStopped, advance, load_task, transition
@@ -68,6 +70,7 @@ class WorkerSettings(BaseSettings):
     worker_concurrency: int = 2
     poll_seconds: float = 2.0
     browser_enabled: bool = True
+    inbox_check_seconds: float = 180.0  # important-email alerts
 
 
 async def connect(database_url: str) -> AsyncConnection:
@@ -210,11 +213,16 @@ async def worker_loop(
     integrations: Integrations | None = None,
 ) -> None:
     worker_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:6]}"
+    next_inbox_check = 0.0
     async with await connect(settings.database_url) as conn:
         while not stop.is_set():
             # Expire unanswered approvals and wake tasks whose approvals are all decided.
             with contextlib.suppress(Exception):
                 await conn.execute("select public.expire_approvals()")
+            # Important-email alerts (only one worker at a time does this, via an advisory lock).
+            if integrations is not None and time.monotonic() >= next_inbox_check:
+                next_inbox_check = time.monotonic() + settings.inbox_check_seconds
+                await _inbox_pass(conn, integrations, pusher)
             claimed = await claim(conn, worker_id)
             if not claimed:
                 with contextlib.suppress(TimeoutError):
@@ -234,6 +242,23 @@ async def worker_loop(
                 integrations=integrations,
             )
             log.info("task %s -> %s", task_id, status)
+
+
+async def _inbox_pass(conn: AsyncConnection, integrations: Integrations, pusher) -> None:
+    try:
+        got = await (
+            await conn.execute("select pg_try_advisory_lock(hashtext('inbox_alerts')) as ok")
+        ).fetchone()
+        if not got["ok"]:
+            return
+        try:
+            sent = await check_inboxes(conn, integrations, pusher)
+            if sent:
+                log.info("sent %s important-email alert(s)", sent)
+        finally:
+            await conn.execute("select pg_advisory_unlock(hashtext('inbox_alerts'))")
+    except Exception:  # noqa: BLE001 - alerts must never stop task processing
+        log.exception("inbox check failed")
 
 
 async def main() -> None:

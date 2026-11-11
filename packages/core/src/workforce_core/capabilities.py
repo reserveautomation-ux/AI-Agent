@@ -67,6 +67,21 @@ CAPABILITIES: tuple[Capability, ...] = (
         "List 30 interior designers in Pune with website and phone, as a spreadsheet",
         ("web_search", "web_fetch", "create_document"),
     ),
+    # Inbox
+    C(
+        "inbox",
+        "Personal assistant",
+        "Read and summarise your email",
+        "What important emails did I get today? Summarise them and draft replies",
+        ("gmail_search", "gmail_read", "gmail_create_draft"),
+    ),
+    C(
+        "drive",
+        "Research",
+        "Save results as Google Docs or Sheets",
+        "Make a list of 30 caterers in Pune and save it as a Google Sheet",
+        ("web_search", "create_document", "save_to_drive"),
+    ),
     # Personal assistant
     C(
         "email",

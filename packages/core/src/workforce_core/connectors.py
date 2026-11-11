@@ -132,6 +132,20 @@ CONNECTORS: tuple[Connector, ...] = (
         oauth=_google((G + "gmail.send",), (G + "gmail.send",)),
     ),
     C(
+        "gmail_inbox",
+        "Gmail inbox",
+        "Communication",
+        "📥",
+        "Read and summarise your email, find messages, save reply drafts in Gmail, and alert "
+        "you when important mail arrives. Drafts are never sent without you.",
+        A.OAUTH2,
+        True,
+        ("gmail_search", "gmail_read", "gmail_create_draft"),
+        oauth=_google((G + "gmail.readonly", G + "gmail.compose"), (G + "gmail.readonly",)),
+        note="Google shows an extra warning for reading mail until the app passes Google's "
+        "review (needed before opening to more than 100 people).",
+    ),
+    C(
         "google_calendar",
         "Google Calendar",
         "Communication",
@@ -275,10 +289,12 @@ CONNECTORS: tuple[Connector, ...] = (
         "Google Drive",
         "Documents",
         "🗂️",
-        "Save files agents make to your Drive.",
+        "Save what agents make to your Drive as Google Docs, Sheets or files. The app can only "
+        "see files it created, never the rest of your Drive.",
         A.OAUTH2,
-        False,
+        True,
         ("save_to_drive",),
+        oauth=_google((G + "drive.file",), (G + "drive.file",)),
     ),
     C(
         "notion",

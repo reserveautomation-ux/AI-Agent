@@ -33,6 +33,10 @@ export async function registerForPush(): Promise<PushResult> {
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 200, 120, 200],
     });
+    await Notifications.setNotificationChannelAsync('mail', {
+      name: 'Important email',
+      importance: Notifications.AndroidImportance.HIGH,
+    });
   }
 
   const current = await Notifications.getPermissionsAsync();

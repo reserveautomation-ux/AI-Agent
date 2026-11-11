@@ -70,7 +70,36 @@ async def notify_task(conn: AsyncConnection, task_id: str, pusher: Pusher | None
 
     title = f"{NOTIFY_STATUSES[task['status']]}: {task['title']}"[:120]
     body = _body(task["result_summary"], task["status"])
-    payload = {"task_id": task_id, "status": task["status"], "title": title, "body": body}
+    return await deliver(
+        conn,
+        pusher,
+        workspace_id=task["workspace_id"],
+        user_id=task["created_by"],
+        task_id=task_id,
+        title=title,
+        body=body,
+        payload={"task_id": task_id, "status": task["status"], "title": title, "body": body},
+        data={"task_id": task_id, "url": f"/tasks/{task_id}"},
+        event_key=f"task_event:{task['event']}",
+        channel_id="tasks",
+    )
+
+
+async def deliver(
+    conn: AsyncConnection,
+    pusher: Pusher | None,
+    *,
+    workspace_id: str,
+    user_id: str,
+    title: str,
+    body: str,
+    payload: dict[str, Any],
+    data: dict[str, Any],
+    event_key: str,
+    task_id: str | None = None,
+    channel_id: str = "tasks",
+) -> int:
+    """Record a notification once (by event_key) and push it to the person's phones."""
     row = await (
         await conn.execute(
             """insert into public.notifications
@@ -78,13 +107,7 @@ async def notify_task(conn: AsyncConnection, task_id: str, pusher: Pusher | None
                values (%s, %s, %s, 'push', %s, %s)
                on conflict (user_id, event_key) where event_key is not null do nothing
                returning id::text""",
-            (
-                task["workspace_id"],
-                task["created_by"],
-                task_id,
-                Jsonb(payload),
-                f"task_event:{task['event']}",
-            ),
+            (workspace_id, user_id, task_id, Jsonb(payload), event_key),
         )
     ).fetchone()
     if row is None:
@@ -94,7 +117,7 @@ async def notify_task(conn: AsyncConnection, task_id: str, pusher: Pusher | None
         await conn.execute(
             "select id::text, token from public.push_devices"
             " where user_id = %s and disabled_at is null",
-            (task["created_by"],),
+            (user_id,),
         )
     ).fetchall()
     if not devices or pusher is None:
@@ -106,15 +129,15 @@ async def notify_task(conn: AsyncConnection, task_id: str, pusher: Pusher | None
             "title": title,
             "body": body,
             "sound": "default",
-            "channelId": "tasks",
-            "data": {"task_id": task_id, "url": f"/tasks/{task_id}"},
+            "channelId": channel_id,
+            "data": data,
         }
         for d in devices
     ]
     try:
         tickets = await pusher.send(messages)
     except (httpx.HTTPError, ValueError) as exc:
-        log.warning("push failed for task %s: %s", task_id, exc)
+        log.warning("push failed for %s: %s", event_key, exc)
         await conn.execute(
             "update public.notifications set status = 'failed' where id = %s", (row["id"],)
         )
