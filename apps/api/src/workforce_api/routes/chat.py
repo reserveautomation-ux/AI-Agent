@@ -236,14 +236,8 @@ def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, default=str)}\n\n"
 
 
-@router.post("/chat")
-async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, settings: SettingsDep):
-    model: engine.ChatModel | None = request.app.state.chat_model
-    if model is None:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            "The assistant isn't set up on the server yet (ANTHROPIC_API_KEY).",
-        )
+async def check_limits(conn, user: CurrentUser, settings) -> None:
+    """Per-person rate limit and per-workspace daily chat budget (until billing exists)."""
     recent = await (
         await conn.execute(
             "select count(*) as n from public.chat_messages m"
@@ -261,6 +255,128 @@ async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, set
             "Today's chat limit is used up. Tasks still run; chat is back within 24 hours.",
         )
 
+
+async def save_user_message(
+    conn, user: CurrentUser, conversation_id: str | None, content: str, via: str, attachments: list
+) -> dict:
+    async with conn.transaction():
+        if conversation_id:
+            conv = await _own_conversation(conn, user, conversation_id)
+        else:
+            conv = await (
+                await conn.execute(
+                    "insert into public.conversations (workspace_id, user_id, title)"
+                    " values (%s, %s, %s) returning id::text, title, created_at, updated_at",
+                    (user.workspace_id, user.user_id, _title(content or attachments[0]["name"])),
+                )
+            ).fetchone()
+        await conn.execute(
+            "insert into public.chat_messages"
+            " (conversation_id, workspace_id, role, content, via, meta)"
+            " values (%s, %s, 'user', %s, %s, %s)",
+            (
+                conv["id"],
+                user.workspace_id,
+                content,
+                via,
+                Jsonb({"attachments": attachments} if attachments else {}),
+            ),
+        )
+        await conn.execute(
+            "update public.conversations set updated_at = now() where id = %s", (conv["id"],)
+        )
+    return conv
+
+
+async def assistant_events(
+    pool: AsyncConnectionPool,
+    model: "engine.ChatModel",
+    settings,
+    user: CurrentUser,
+    conversation_id: str,
+    query: str,
+    via: str,
+):
+    """Run the assistant on a conversation; yields chat events and ends with done/error.
+    The reply is saved even if the caller stops listening part-way."""
+    text, saved = "", False
+    async with pool.connection() as c:
+        try:
+            system = await engine.system_prompt(
+                c,
+                workspace_id=user.workspace_id,
+                conversation_id=conversation_id,
+                who=user.email or "the user",
+                query=query,
+                voice=via == "voice",
+                name=await assistant_name(c, user),
+            )
+            params = {
+                "model": settings.chat_model,
+                "max_tokens": 4000,
+                "system": system,
+                "messages": await engine.history(c, conversation_id),
+                "tools": engine.TOOLS,
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": settings.chat_effort},
+                "cache_control": {"type": "ephemeral"},
+            }
+            async for event in engine.reply(
+                model,
+                c,
+                _Tools(c, user, conversation_id),
+                params=params,
+                workspace_id=user.workspace_id,
+            ):
+                if event["type"] == "text":
+                    text += event["text"]
+                if event["type"] != "end":
+                    yield event
+                    continue
+                msg = await _save_reply(c, conversation_id, user.workspace_id, event, via)
+                saved = True
+                yield {"type": "done", "message_id": msg, "text": event["text"]}
+        except Exception as exc:  # noqa: BLE001 - tell the app, keep what was said
+            if not saved:
+                await _save_reply(
+                    c,
+                    conversation_id,
+                    user.workspace_id,
+                    {"text": text.strip() or "(no reply)", "tasks": [], "memories": []},
+                    via,
+                    error=True,
+                )
+                saved = True
+            message = (
+                "The assistant is busy right now. Please try again in a moment."
+                if "anthropic" in type(exc).__module__
+                else "Something went wrong while replying. Please try again."
+            )
+            yield {"type": "error", "message": message}
+        finally:
+            if not saved and text.strip():  # the listener went away mid-reply
+                await asyncio.shield(
+                    _save_reply(
+                        c,
+                        conversation_id,
+                        user.workspace_id,
+                        {"text": text.strip(), "tasks": [], "memories": []},
+                        via,
+                        error=True,
+                    )
+                )
+
+
+@router.post("/chat")
+async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, settings: SettingsDep):
+    model: engine.ChatModel | None = request.app.state.chat_model
+    if model is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "The assistant isn't set up on the server yet (ANTHROPIC_API_KEY).",
+        )
+    await check_limits(conn, user, settings)
+
     attachments: list[dict] = []
     if body.attachments:
         found = await (
@@ -275,109 +391,18 @@ async def chat(body: ChatIn, request: Request, user: UserDep, conn: ConnDep, set
             raise HTTPException(status.HTTP_404_NOT_FOUND, "attachment not found")
         attachments = [dict(by_id[i]) for i in dict.fromkeys(body.attachments)]
 
-    async with conn.transaction():
-        if body.conversation_id:
-            conv = await _own_conversation(conn, user, body.conversation_id)
-        else:
-            conv = await (
-                await conn.execute(
-                    "insert into public.conversations (workspace_id, user_id, title)"
-                    " values (%s, %s, %s) returning id::text, title, created_at, updated_at",
-                    (
-                        user.workspace_id,
-                        user.user_id,
-                        _title(body.content or attachments[0]["name"]),
-                    ),
-                )
-            ).fetchone()
-        await conn.execute(
-            "insert into public.chat_messages"
-            " (conversation_id, workspace_id, role, content, via, meta)"
-            " values (%s, %s, 'user', %s, %s, %s)",
-            (
-                conv["id"],
-                user.workspace_id,
-                body.content,
-                body.via,
-                Jsonb({"attachments": attachments} if attachments else {}),
-            ),
-        )
-        await conn.execute(
-            "update public.conversations set updated_at = now() where id = %s", (conv["id"],)
-        )
-
+    conv = await save_user_message(
+        conn, user, body.conversation_id, body.content, body.via, attachments
+    )
     pool: AsyncConnectionPool = request.app.state.pool
-    who = user.email or "the user"
-    name = await assistant_name(conn, user)
+    query = body.content or " ".join(a["name"] for a in attachments)
 
     async def stream():
         yield _sse({"type": "conversation", "id": conv["id"], "title": conv["title"]})
-        text, saved = "", False
-        async with pool.connection() as c:
-            try:
-                system = await engine.system_prompt(
-                    c,
-                    workspace_id=user.workspace_id,
-                    conversation_id=conv["id"],
-                    who=who,
-                    query=body.content or " ".join(a["name"] for a in attachments),
-                    voice=body.via == "voice",
-                    name=name,
-                )
-                params = {
-                    "model": settings.chat_model,
-                    "max_tokens": 4000,
-                    "system": system,
-                    "messages": await engine.history(c, conv["id"]),
-                    "tools": engine.TOOLS,
-                    "thinking": {"type": "adaptive"},
-                    "output_config": {"effort": settings.chat_effort},
-                    "cache_control": {"type": "ephemeral"},
-                }
-                async for event in engine.reply(
-                    model,
-                    c,
-                    _Tools(c, user, conv["id"]),
-                    params=params,
-                    workspace_id=user.workspace_id,
-                ):
-                    if event["type"] == "text":
-                        text += event["text"]
-                    if event["type"] != "end":
-                        yield _sse(event)
-                        continue
-                    msg = await _save_reply(c, conv["id"], user.workspace_id, event, body.via)
-                    saved = True
-                    yield _sse({"type": "done", "message_id": msg, "text": event["text"]})
-            except Exception as exc:  # noqa: BLE001 - tell the app, keep what was said
-                if not saved:
-                    await _save_reply(
-                        c,
-                        conv["id"],
-                        user.workspace_id,
-                        {"text": text.strip() or "(no reply)", "tasks": [], "memories": []},
-                        body.via,
-                        error=True,
-                    )
-                    saved = True
-                message = (
-                    "The assistant is busy right now. Please try again in a moment."
-                    if "anthropic" in type(exc).__module__
-                    else "Something went wrong while replying. Please try again."
-                )
-                yield _sse({"type": "error", "message": message})
-            finally:
-                if not saved and text.strip():  # the app disconnected mid-reply
-                    await asyncio.shield(
-                        _save_reply(
-                            c,
-                            conv["id"],
-                            user.workspace_id,
-                            {"text": text.strip(), "tasks": [], "memories": []},
-                            body.via,
-                            error=True,
-                        )
-                    )
+        async for event in assistant_events(
+            pool, model, settings, user, conv["id"], query, body.via
+        ):
+            yield _sse(event)
 
     return StreamingResponse(
         stream(),

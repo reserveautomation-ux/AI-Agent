@@ -21,6 +21,8 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY # chat assistant replies (same key as the worker)
         sync: false
+      - key: PUBLIC_API_URL # this API's https address (Telegram chat sends messages here)
+        sync: false
       # Gmail + Google Calendar (optional until you connect them; see docs/DEPLOY.md step 5)
       - key: GOOGLE_CLIENT_ID
         sync: false

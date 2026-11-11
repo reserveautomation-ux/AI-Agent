@@ -20,6 +20,7 @@ from psycopg import AsyncConnection
 from psycopg import errors as pg_errors
 from psycopg.rows import dict_row
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from workforce_core import telegram
 from workforce_core.db import sync_tool_definitions
 
 from .agent_loop import AgentError
@@ -27,7 +28,7 @@ from .browser import BrowserService, DomainPolicy
 from .executor import Integrations
 from .inbox import check_inboxes
 from .llm import LLM, AnthropicLLM, BudgetExceeded, Refused
-from .notify import ExpoPusher, Pusher, notify_task
+from .notify import ExpoPusher, Pusher, add_forwarder, notify_task
 from .pipeline import TaskStopped, advance, load_task, transition
 from .scheduler import fire_due
 
@@ -278,10 +279,15 @@ async def main() -> None:
     if settings.browser_enabled:
         browser = BrowserService(DomainPolicy())
         await browser.start()
-    workers = [
-        asyncio.create_task(
-            worker_loop(settings, llm, browser, stop, ExpoPusher(), Integrations.from_env())
+    integrations = Integrations.from_env()
+    # Alerts (task updates, reminders, important email) also go to a linked Telegram chat.
+    add_forwarder(
+        lambda conn, ws, uid, text: telegram.forward(
+            conn, integrations.box, integrations.http, workspace_id=ws, user_id=uid, text=text
         )
+    )
+    workers = [
+        asyncio.create_task(worker_loop(settings, llm, browser, stop, ExpoPusher(), integrations))
         for _ in range(settings.worker_concurrency)
     ]
 

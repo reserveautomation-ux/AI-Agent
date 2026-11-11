@@ -180,6 +180,12 @@ find it):
 | GitHub | Fine-grained token (Contents + Administration: read/write) | Create a repository and save the website/app files a task made |
 | Vercel | Account token | Publish a website a task made, at a `*.vercel.app` address |
 
+**Chat with the assistant from Telegram (free):** set `PUBLIC_API_URL` on **workforce-api**
+to its public `https://` address. People connect their own bot (Telegram row above), then
+tap **Link Telegram chat** in Connections and press *Start* in Telegram. Only their own
+chat can talk to their assistant; task updates, reminders and important-email alerts are
+also sent there.
+
 **Slack** uses "Sign in with Slack" and needs a one-time Slack app:
 
 1. **api.slack.com/apps → Create New App → From scratch**.

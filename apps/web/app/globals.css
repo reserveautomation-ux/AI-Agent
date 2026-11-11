@@ -561,3 +561,5 @@ button.avatar { padding: 0; cursor: pointer; }
   display: inline-block; background: var(--p-card); border: 1px solid var(--p-line); border-radius: 14px;
   padding: 8px 12px; font-size: 0.9rem;
 }
+.tg-box { display: grid; gap: 6px; border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 4px; }
+.tg-box p { margin: 0; }

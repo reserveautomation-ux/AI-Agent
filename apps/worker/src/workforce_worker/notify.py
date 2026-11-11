@@ -6,6 +6,7 @@ and iOS (APNs). Sending is best-effort: a failed push never fails a task.
 
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
 import httpx
@@ -22,6 +23,15 @@ NOTIFY_STATUSES = {
     "blocked": "❓ Needs your input",
     "failed": "⚠️ Couldn't finish",
 }
+
+
+# Extra channels for alerts (e.g. the owner's linked Telegram chat), set up by the runner.
+Forwarder = Callable[[AsyncConnection, str, str, str], Awaitable[bool]]
+_forwarders: list[Forwarder] = []
+
+
+def add_forwarder(fn: Forwarder) -> None:
+    _forwarders.append(fn)
 
 
 class Pusher(Protocol):
@@ -112,6 +122,12 @@ async def deliver(
     ).fetchone()
     if row is None:
         return 0  # already notified for this exact event
+
+    for forward in _forwarders:
+        try:
+            await forward(conn, workspace_id, user_id, f"{title}\n{body}")
+        except Exception:  # noqa: BLE001 - another channel must never block push
+            log.exception("forwarding %s failed", event_key)
 
     devices = await (
         await conn.execute(

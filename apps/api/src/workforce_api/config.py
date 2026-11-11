@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     oauth_redirect_uri: str | None = None
     slack_client_id: str | None = None
     slack_client_secret: str | None = None
+    # This API's own public address, e.g. https://workforce-api.onrender.com
+    # (Telegram sends messages for the "chat from Telegram" feature here).
+    public_api_url: str | None = None
     # Chat assistant (Claude). Without a key, chat explains it isn't set up yet.
     anthropic_api_key: str | None = None
     chat_model: str = "claude-opus-5-5"

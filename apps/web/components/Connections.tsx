@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { TelegramChat } from "@/components/TelegramChat";
 import {
   api,
   connectorState,
@@ -259,6 +260,7 @@ function ConnectorCard({
         </p>
       ))}
 
+      {c.key === "telegram" && state === "connected" && <TelegramChat />}
       {c.auth === "deep_link" && c.open_url && (
         <p className="small">
           <a href={c.open_url} target="_blank" rel="noreferrer">

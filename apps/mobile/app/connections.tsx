@@ -4,6 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
 
+import { TelegramChat } from '@/components/TelegramChat';
 import { Badge, Button, Card, ErrorText, H, Input, T, styles } from '@/components/ui';
 import { api, post, type Connector, type Me } from '@/lib/api';
 import { confirmAsync } from '@/lib/confirm';
@@ -147,6 +148,7 @@ export default function ConnectionsScreen() {
             The server admin needs to switch this on first.
           </T>
         )}
+        {x.key === 'telegram' && state === 'connected' && <TelegramChat />}
         {x.auth === 'deep_link' && !!x.open_url && (
           <View style={{ marginTop: 10 }}>
             <Button title={`Open ${x.name}`} small variant="ghost" onPress={() => Linking.openURL(x.open_url)} />

@@ -8,7 +8,16 @@ from workforce_core.db import make_pool, sync_tool_definitions
 from .chat import AnthropicChat, ChatModel
 from .config import Settings, get_settings
 from .deps import ConnDep
-from .routes import approvals, chat, connections, memory, tasks, workforce, workspace
+from .routes import (
+    approvals,
+    chat,
+    connections,
+    memory,
+    tasks,
+    telegram,
+    workforce,
+    workspace,
+)
 
 
 def create_app(
@@ -58,6 +67,7 @@ def create_app(
     app.include_router(connections.router)
     app.include_router(connections.catalog_router)
     app.include_router(chat.router)
+    app.include_router(telegram.router)
     return app
 
 

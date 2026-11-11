@@ -295,3 +295,48 @@ def test_important_mail_alerts_once_and_only_new_mail(database_url, db, workspac
     )
     assert alert["channelId"] == "mail"
     assert fake.queries[-1].startswith("is:important is:unread")
+
+
+def test_alerts_are_forwarded_to_linked_telegram(database_url, db, workspace):
+    from workforce_core import telegram
+
+    sent: list[dict] = []
+
+    def tg(req: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(req.content))
+        return httpx.Response(200, json={"ok": True, "result": {}})
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(tg))
+
+    async def go(c):
+        cid = await _connect(c, workspace.id, "telegram")
+        await c.execute(
+            "update connection_secrets set ciphertext = %s where id = "
+            "(select secret_ref from tool_connections where id = %s)",
+            (
+                SecretBox(KEY).encrypt(
+                    {"bot_token": "123:abc"}, f"workforce:{workspace.id}:telegram"
+                ),
+                cid,
+            ),
+        )
+        assert not await telegram.forward(
+            c, SecretBox(KEY), http, workspace_id=workspace.id, user_id=workspace.user, text="x"
+        )  # not linked yet
+        await c.execute(
+            "insert into telegram_links"
+            " (workspace_id, user_id, connection_id, secret_hash, chat_id)"
+            " values (%s, %s, %s, 'h', 555)",
+            (workspace.id, workspace.user, cid),
+        )
+        return await telegram.forward(
+            c,
+            SecretBox(KEY),
+            http,
+            workspace_id=workspace.id,
+            user_id=workspace.user,
+            text="📧 Important: Accounts\nInvoice #42",
+        )
+
+    assert run(database_url, go) is True
+    assert sent == [{"chat_id": 555, "text": "📧 Important: Accounts\nInvoice #42"}]
